@@ -145,7 +145,7 @@ program main
     
     !$OMP END PARALLEL
 
-    !$ACC ENTER DATA CREATE(heap(:,:))
+    !$ACC EXIT DATA DELETE(heap(:,:))
     DEALLOCATE(heap)    
 
     CONTAINS
