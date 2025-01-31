@@ -1,0 +1,26 @@
+# ZAM069
+# /opt/intel/oneapi/2025.0/oneapi-vars.sh
+
+FC = ifx
+
+COMPILER_OPTIONS = -O3 -qopenmp -stand f08
+
+LINKER_OPTIONS = -O3 -qopenmp -stand f08
+
+TARGET = fortranMemoryHeap
+
+SOURCES = main.F90
+
+OBJECTS = $(patsubst %.F90, %.o, $(SOURCES))
+
+%.o : %.F90
+	@echo "compiling $^ ..."
+	@$(FC) $(COMPILER_OPTIONS) -c $^ -o $@
+
+all : $(OBJECTS)
+	@rm -f $(TARGET).exe
+	@echo "building $(TARGET) ..."
+	@$(FC) $(LINKER_OPTIONS) $(OBJECTS) -o $(TARGET).exe
+
+clean :
+	@rm -f $(TARGET).exe $(OBJECTS) *.mod
