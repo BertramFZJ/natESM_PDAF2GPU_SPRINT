@@ -2,15 +2,21 @@ program main
 
     USE OMP_LIB
 
+    USE mo_mem_worspaces, ONLY: memInitLibrary, memSetOmpNumThreads, memAllocateAnalysisHeap, &
+                                memDeallocateAnalysisHeap, memGetPointerAnalysisHeap, &
+                                memGetThreadPointerAnalysisHeap
+
     IMPLICIT NONE
 
     INTEGER, PARAMETER :: threadGroupSize = 8 ! Number of OpenMP threads in a group
     INTEGER, PARAMETER :: heapSize = 17 ! Memory block size for a single thread
-    INTEGER, ALLOCATABLE, TARGET :: heap(:,:) ! A heap of memory
+
+    INTEGER, POINTER :: heap(:,:) ! A heap of memory
 
     ! Temporary arrays
     INTEGER, POINTER :: array2D(:,:) => null() ! array2D(1:nRow, 1:nCol)
     INTEGER, POINTER :: array1D(:) => null() ! array1D(1:nCell)
+    INTEGER, POINTER :: threadHeap(:) => null()
     INTEGER :: nCol, nRow, nCell
 
     INTEGER :: col, row, cell, iThread, threadId, groupSize
@@ -19,8 +25,10 @@ program main
 
     ! Allocating memory for the heap
     ! The heap has the form of a two-dimensional matrix. Each OpenMP thread uses one of the matrix columns.
-    ALLOCATE(heap(1:heapSize, 1:threadGroupSize))
-    !$ACC ENTER DATA CREATE(heap(:,:))    
+    CALL memInitLibrary()
+    CALL memSetOmpNumThreads( threadGroupSize )
+    CALL memAllocateAnalysisHeap( heapSize = heapSize, numaInitFlag = .TRUE., accEnterDataFlag = .TRUE.)
+    CALL memGetPointerAnalysisHeap( heap )
     
     !$ACC KERNELS DEFAULT(PRESENT)
     heap = - 1
@@ -28,7 +36,7 @@ program main
     !$ACC UPDATE HOST(heap(:,:))
 
     !$OMP PARALLEL NUM_THREADS(threadGroupSize) PRIVATE(col, nCol, row, nRow, cell, nCell, iThread, threadId, groupSize) &
-    !$OMP PRIVATE(array2D, array1D, heapOffset) SHARED(heap)
+    !$OMP PRIVATE(array2D, array1D, threadHeap, heapOffset) SHARED(heap)
 
     threadId = OMP_GET_THREAD_NUM()
     groupSize = OMP_GET_NUM_THREADS()
@@ -56,11 +64,20 @@ program main
 
     ! Allocating memory for temporary arrays
     ! The shift parameter stores the size of the memory block already occupied by temporary arrays.
+#if 1
+    CALL memGetThreadPointerAnalysisHeap(threadHeap, threadId)
+    heapOffset = 0
+    array2D(1:nRow, 1:nCol) => threadHeap(heapOffset + 1:heapOffset + nCol * nRow)
+    heapOffset = heapOffset + nRow * nCol
+    array1D(1:nCell) => threadHeap(heapOffset + 1:heapOffset + nCell)
+    heapOffset = heapOffset + nCell
+#else
     heapOffset = 0
     array2D(1:nRow, 1:nCol) => heap(heapOffset + 1:heapOffset + nCol * nRow, threadId + 1)
     heapOffset = heapOffset + nRow * nCol
     array1D(1:nCell) => heap(heapOffset + 1:heapOffset + nCell, threadId + 1)
     heapOffset = heapOffset + nCell
+#endif
 
     !$OMP BARRIER
     DO iThread = 0, groupSize
@@ -145,8 +162,7 @@ program main
     
     !$OMP END PARALLEL
 
-    !$ACC EXIT DATA DELETE(heap(:,:))
-    DEALLOCATE(heap)    
+    CALL memDeallocateAnalysisHeap()
 
     CONTAINS
 

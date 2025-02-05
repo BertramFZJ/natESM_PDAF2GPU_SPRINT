@@ -6,7 +6,7 @@ LINKER_OPTIONS = -O3 -fopenmp -std=f2008
 
 TARGET = fortranMemoryHeap
 
-SOURCES = main.F90
+SOURCES = mo_mem_workspaces.F90 main.F90
 
 OBJECTS = $(patsubst %.F90, %.o, $(SOURCES))
 

@@ -10,7 +10,7 @@ LINKER_OPTIONS = -mp -acc=gpu $(SMARCH) $(CUDAVER) $(LTOFLAG)
 
 TARGET = fortranMemoryHeap
 
-SOURCES = main.F90
+SOURCES = mo_mem_workspaces.F90 main.F90
 
 OBJECTS = $(patsubst %.F90, %.o, $(SOURCES))
 
