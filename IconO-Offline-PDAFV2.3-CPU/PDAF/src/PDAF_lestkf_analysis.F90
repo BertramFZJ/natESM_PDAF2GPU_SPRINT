@@ -1,3 +1,5 @@
+#define USE_STATIC_HEAP
+
 ! Copyright (c) 2004-2024 Lars Nerger
 !
 ! This file is part of PDAF.
@@ -64,6 +66,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   USE omp_lib, &
        ONLY: omp_get_num_threads, omp_get_thread_num
 #endif
+  USE mo_mem_worspaces, &
+       ONLY: memGetThreadPointerAnalysisHeap
 
   IMPLICIT NONE
 
@@ -127,6 +131,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   REAL    :: fac                       ! Temporary variable sqrt(dim_ens) or sqrt(rank)
   INTEGER, SAVE :: lastdomain = -1     ! store domain index
   LOGICAL, SAVE :: screenout = .true.  ! Whether to print information to stdout
+
+#ifndef USE_STATIC_HEAP
   REAL, ALLOCATABLE :: HL_l(:,:)       ! Temporary matrices for analysis
   REAL, ALLOCATABLE :: RiHL_l(:,:)     ! Temporary matrices for analysis
   REAL, ALLOCATABLE :: resid_l(:)      ! observation residual
@@ -139,12 +145,32 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   REAL, ALLOCATABLE :: ens_blk(:,:)  ! Temporary blocked state ensemble
   REAL, ALLOCATABLE :: svals(:)      ! Singular values of Ainv
   REAL, ALLOCATABLE :: work(:)       ! Work array for syevTYPE
+#else
+  REAL, POINTER     :: HL_l(:,:)       ! Temporary matrices for analysis
+  REAL, POINTER     :: RiHL_l(:,:)     ! Temporary matrices for analysis
+  REAL, POINTER     :: resid_l(:)      ! observation residual
+  REAL, POINTER     :: obs_l(:)        ! local observation vector
+  REAL, POINTER     :: HXbar_l(:)      ! state projected onto obs. space
+  REAL, POINTER     :: RiHLd_l(:)      ! local RiHLd
+  REAL, POINTER     :: VRiHLd_l(:)     ! Temporary vector for analysis
+  REAL, POINTER     :: tmp_Ainv_l(:,:) ! Temporary storage of Ainv
+  REAL, POINTER     :: OmegaT(:,:)   ! Transpose of Omega
+  REAL, POINTER     :: ens_blk(:,:)  ! Temporary blocked state ensemble
+  REAL, POINTER     :: svals(:)      ! Singular values of Ainv
+  REAL, POINTER     :: work(:)       ! Work array for syevTYPE
+#endif
+
   INTEGER, ALLOCATABLE :: ipiv(:)    ! vector of pivot indices for GESVTYPE
   INTEGER, SAVE :: mythread, nthreads  ! Thread variables for OpenMP
   REAL :: state_inc_l_dummy(1)       ! Dummy variable to avoid compiler warning
 
-!$OMP THREADPRIVATE(mythread, nthreads, lastdomain, allocflag, screenout)
+#ifdef USE_STATIC_HEAP
+  INTEGER       :: workspaceOffset
+  ! REAL, TARGET  :: heapBody(1:65536)
+  REAL, POINTER :: heapPointer(:)
+#endif
 
+!$OMP THREADPRIVATE(mythread, nthreads, lastdomain, allocflag, screenout)
 
 ! *******************
 ! *** Preparation ***
@@ -158,6 +184,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 #else
   nthreads = 1
   mythread = 0
+#endif
+
+#ifdef USE_STATIC_HEAP
+  workspaceOffset = 1
+  ! heapPointer(1:65536) => heapBody(1:65536)
+  CALL memGetThreadPointerAnalysisHeap(heapPointer, mythread)
 #endif
 
   ! Initialize variable to prevent compiler warning
@@ -197,9 +229,16 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   haveobsB: IF (dim_obs_l > 0) THEN
      ! *** The residual only exists for domains with observations ***
 
-     ALLOCATE(resid_l(dim_obs_l))
-     ALLOCATE(obs_l(dim_obs_l))
-     ALLOCATE(HXbar_l(dim_obs_l))
+#ifndef USE_STATIC_HEAP
+     ALLOCATE(resid_l(dim_obs_l), obs_l(dim_obs_l), HXbar_l(dim_obs_l))
+#else
+     resid_l(1:dim_obs_l) => heapPointer(workspaceOffset : workspaceOffset + dim_obs_l)
+     workspaceOffset = workspaceOffset + dim_obs_l
+     obs_l(1:dim_obs_l)   => heapPointer(workspaceOffset : workspaceOffset + dim_obs_l)
+     workspaceOffset = workspaceOffset + dim_obs_l
+     HXbar_l(1:dim_obs_l) => heapPointer(workspaceOffset : workspaceOffset + dim_obs_l)
+     workspaceOffset = workspaceOffset + dim_obs_l
+#endif
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', 3 * dim_obs_l)
 
      ! Restrict mean obs. state onto local observation space
@@ -252,7 +291,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      CALL PDAF_timeit(30, 'new')
 
      ! *** Compute HL = [Hx_1 ... Hx_N] Omega
+#ifndef USE_STATIC_HEAP
      ALLOCATE(HL_l(dim_obs_l, dim_ens))
+#else
+     HL_l(1:dim_obs_l,1:dim_ens) => heapPointer(workspaceOffset : workspaceOffset + dim_obs_l * dim_ens)
+     workspaceOffset = workspaceOffset + dim_obs_l * dim_ens
+#endif
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', dim_obs_l * dim_ens)
 
      CALL PDAF_timeit(46, 'new')
@@ -279,7 +323,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
              HXbar_l, resid_l, obs_l, U_init_n_domains_p, U_init_obsvar_l, &
              forget)
      ENDIF
+#ifndef USE_STATIC_HEAP
      DEALLOCATE(HXbar_l)
+#endif
 
      ! Complete HL = [Hx_1 ... Hx_N] Omega
      CALL PDAF_estkf_AOmega(dim_obs_l, dim_ens, HL_l)
@@ -298,7 +344,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      IF (debug>0) &
           WRITE (*,*) '++ PDAF-debug: ', debug, 'PDAF_lestkf_analysis -- call prodRinvA_l'
 
+#ifndef USE_STATIC_HEAP
      ALLOCATE(RiHL_l(dim_obs_l, rank))
+#else
+    RiHL_l(1:dim_obs_l, 1:rank) => heapPointer(workspaceOffset : workspaceOffset + dim_obs_l * rank)
+     workspaceOffset = workspaceOffset + dim_obs_l * rank
+#endif
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', dim_obs_l * rank)
 
      CALL PDAF_timeit(48, 'new')
@@ -308,7 +359,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      IF (debug>0) &
           WRITE (*,*) '++ PDAF-debug PDAF_lestkf_analysis:', debug, '  R^-1(HXT_l)', RiHL_l
 
+#ifndef USE_STATIC_HEAP
      DEALLOCATE(obs_l)
+#endif
  
      CALL PDAF_timeit(51, 'new')
 
@@ -320,14 +373,21 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
      ! ***             T        ***
      ! ***  Compute  HL  RiHL   ***
+#ifndef USE_STATIC_HEAP
      ALLOCATE(tmp_Ainv_l(rank, rank))
+#else
+     tmp_Ainv_l(1:rank, 1:rank) => heapPointer(workspaceOffset : workspaceOffset + rank * rank)
+     workspaceOffset = workspaceOffset + rank * rank
+#endif
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank**2)
 
      CALL gemmTYPE('t', 'n', rank, rank, dim_obs_l, &
           1.0, HL_l, dim_obs_l, RiHL_l, dim_obs_l, &
           0.0, tmp_Ainv_l, rank)
 
+#ifndef USE_STATIC_HEAP
      DEALLOCATE(HL_l)
+#endif
      CALL PDAF_timeit(51, 'old')
 
   ELSE haveobsA
@@ -344,7 +404,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      END DO
 
      ! No observation-contribution to Ainv from this domain
+#ifndef USE_STATIC_HEAP
      ALLOCATE(tmp_Ainv_l(rank, rank))
+#else
+     tmp_Ainv_l(1:rank, 1:rank) => heapPointer(workspaceOffset : workspaceOffset + rank * rank)
+     workspaceOffset = workspaceOffset + rank * rank
+#endif
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank**2)
 
      tmp_Ainv_l = 0.0
@@ -378,7 +443,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   CALL PDAF_timeit(51, 'new')
 
   ! *** Compute RiHLd = RiHL^T d ***
+#ifndef USE_STATIC_HEAP
   ALLOCATE(RiHLd_l(rank))
+#else
+  RiHLd_l(1:rank) => heapPointer(workspaceOffset : workspaceOffset + rank)
+  workspaceOffset = workspaceOffset + rank
+#endif
   IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank)
 
   haveobsC: IF (dim_obs_l > 0) THEN
@@ -390,7 +460,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      IF (debug>0) &
           WRITE (*,*) '++ PDAF-debug PDAF_lestkf_analysis:', debug, '  (HXT_l R^-1)^T d_l', RiHLd_l
 
+#ifndef USE_STATIC_HEAP
      DEALLOCATE(RiHL_l, resid_l)
+#endif
 
   ELSE haveobsC
 
@@ -434,9 +506,14 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
   ELSE typeainv1
      ! *** Variant 2: Invert Ainv using SVD
-
-     ALLOCATE(svals(rank))
-     ALLOCATE(work(3 * rank))
+#ifndef USE_STATIC_HEAP
+     ALLOCATE(svals(rank), work(3 * rank))
+#else
+     svals(1:rank)  => heapPointer(workspaceOffset : workspaceOffset +     rank)
+     workspaceOffset = workspaceOffset + 1 * rank
+     work(1:3*rank) => heapPointer(workspaceOffset : workspaceOffset + 3 * rank)
+     workspaceOffset = workspaceOffset + 3 * rank
+#endif
      ldwork = 3 * rank
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', 4 * rank)
 
@@ -447,14 +524,21 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      ! Compute SVD of Ainv
      CALL syevTYPE('v', 'l', rank, Ainv_l, rank, svals, work, ldwork, lib_info)
 
+#ifndef USE_STATIC_HEAP
      DEALLOCATE(work)
+#endif
 
      ! Compute product A RiHLd
      IF (lib_info==0) THEN
         IF (debug>0) &
              WRITE (*,*) '++ PDAF-debug PDAF_lestkf_analysis:', debug, '  eigenvalues', svals
 
+#ifndef USE_STATIC_HEAP
         ALLOCATE(VRiHLd_l(rank))
+#else
+        VRiHLd_l(1:rank)  => heapPointer(workspaceOffset : workspaceOffset + rank)
+        workspaceOffset = workspaceOffset + rank
+#endif
         IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank)
 
         CALL gemvTYPE('t', rank, rank, 1.0, Ainv_l, &
@@ -467,7 +551,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
         CALL gemvTYPE('n', rank, rank, 1.0, Ainv_l, &
              rank, VRiHLd_l, 1, 0.0, RiHLd_l, 1)
 
+#ifndef USE_STATIC_HEAP
         DEALLOCATE(VRiHLd_l)
+#endif
      END IF
   END IF typeainv1
 
@@ -501,7 +587,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   check1: IF (flag == 0) THEN
 
      ! allocate fields
+#ifndef USE_STATIC_HEAP
      ALLOCATE(OmegaT(rank, dim_ens))
+#else
+     OmegaT(1:rank, 1:dim_ens) => heapPointer(workspaceOffset : workspaceOffset + rank * dim_ens)
+     workspaceOffset = workspaceOffset + rank * dim_ens
+#endif
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank * dim_ens)
 
      IF (mype == 0 .AND. screen > 0 .AND. screenout) THEN
@@ -551,7 +642,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
         CALL gemmTYPE('n', 't', rank, rank, rank, &
              1.0, OmegaT, rank, Ainv_l, rank, &
              0.0, tmp_Ainv_l, rank)
+#ifndef USE_STATIC_HEAP
         DEALLOCATE(svals)
+#endif
 
         ! Set flag
         flag = 0
@@ -626,7 +719,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
         END DO
      END IF
 
+#ifndef USE_STATIC_HEAP
      DEALLOCATE(RiHLd_l)
+#endif
       
      ! *** Omega A^T (A^T stored in OmegaT_l) ***
      CALL PDAF_estkf_OmegaA(rank, dim_ens, OmegaT, TA)
@@ -646,7 +741,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
           WRITE (*, '(a, 5x, a, i5)') &
           'PDAF', '--- use blocking with size ', maxblksize
 
+#ifndef USE_STATIC_HEAP
      ALLOCATE(ens_blk(maxblksize, dim_ens))
+#else
+     ens_blk(1:maxblksize, 1:dim_ens) => heapPointer(workspaceOffset : workspaceOffset + maxblksize * dim_ens)
+     workspaceOffset = workspaceOffset + maxblksize * dim_ens
+#endif
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', maxblksize * dim_ens)
 
      blocking: DO blklower = 1, dim_l, maxblksize
@@ -676,9 +776,10 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
         CALL PDAF_timeit(22, 'old')
 
      END DO blocking
-        
-     DEALLOCATE(ens_blk)
-     DEALLOCATE(OmegaT)
+
+#ifndef USE_STATIC_HEAP
+     DEALLOCATE(ens_blk, OmegaT)
+#endif
 
   END IF check3
 
@@ -689,7 +790,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 ! *** Finishing up ***
 ! ********************
 
+#ifndef USE_STATIC_HEAP
   DEALLOCATE(tmp_Ainv_l)
+#endif
 
   IF (allocflag == 0) allocflag = 1
 
