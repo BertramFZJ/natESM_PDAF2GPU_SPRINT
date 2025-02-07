@@ -480,7 +480,7 @@ OBJ_PDAF_VAR = $(OBJ_PDAF) $(OBJ_3DVAR)
 
 # External Routines for natESM sprint tools
 OBJ_NATESM_C = ../external/natEsmP2G/threadAffinityLibCoreC.o
-OBJ_NATESM_F = ../external/natEsmP2G/talcc_c_bindings.o
+OBJ_NATESM_F = ../external/natEsmP2G/talcc_c_bindings.o ../external/natEsmP2G/mo_mem_workspaces.o
 
 # External Routines for SANGOMA tools
 OBJ_SANGOMA = ../external/SANGOMA/SANGOMA_quicksort.o
