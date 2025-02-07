@@ -17,7 +17,7 @@ MODULE mo_mem_worspaces
     PUBLIC :: memAllocateAnalysisHeap
     PUBLIC :: memGetPointerAnalysisHeap
     PUBLIC :: memDeallocateAnalysisHeap
-    PUBLIC :: memGetThreadPointerAnalysisHeap    
+    PUBLIC :: memGetThreadPointerAnalysisHeap
 
     INTEGER :: numOmpThreads
 
