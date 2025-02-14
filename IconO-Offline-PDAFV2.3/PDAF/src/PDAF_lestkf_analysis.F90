@@ -391,8 +391,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      DO kCell = 1, dim_obs_l
         resid_l(kCell) = obs_l(kCell) - HXbar_l(kCell)
      ENDDO
-     !$ACC END PARALLEL LOOP
-     !$ACC UPDATE HOST(resid_l(:)) ASYNC(accStreamId)
+     !$ACC END PARALLEL LOOP     
      !$ACC WAIT(accStreamId)
 
 #endif
@@ -436,6 +435,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
      ! *** Compute HL = [Hx_1 ... Hx_N] Omega
      ALLOCATE(HL_l(dim_obs_l, dim_ens))
+     !$ACC ENTER DATA CREATE(HL_l(:,:)) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', dim_obs_l * dim_ens)
 
      CALL PDAF_timeit(46, 'new')
@@ -478,12 +479,10 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 #ifndef _OPENACC
      CALL PDAF_estkf_AOmega(dim_obs_l, dim_ens, HL_l)
 #else
-    !$ACC ENTER DATA CREATE(HL_l(:,:)) ASYNC(accStreamId)
     !$ACC UPDATE DEVICE(HL_l(:,:)) ASYNC(accStreamId)
     !$ACC WAIT(accStreamId)
     CALL PDAF_estkf_AOmega(dim_obs_l, dim_ens, HL_l, accStreamId)
-    !$ACC UPDATE HOST(HL_l(:,:)) ASYNC(accStreamId)
-    !$ACC EXIT DATA DELETE(HL_l(:,:)) ASYNC(accStreamId)
+    !$ACC UPDATE HOST(HL_l(:,:)) ASYNC(accStreamId)    
     !$ACC WAIT(accStreamId)
 #endif
      ! WRITE(0,*) '**************** RSE: EXIT PDAF_estkf_AOmega #1'
@@ -503,6 +502,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
           WRITE (*,*) '++ PDAF-debug: ', debug, 'PDAF_lestkf_analysis -- call prodRinvA_l'
 
      ALLOCATE(RiHL_l(dim_obs_l, rank))
+     !$ACC ENTER DATA CREATE(RiHL_l(:,:)) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', dim_obs_l * rank)
 
      CALL PDAF_timeit(48, 'new')
@@ -546,6 +547,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      ! ***             T        ***
      ! ***  Compute  HL  RiHL   ***
      ALLOCATE(tmp_Ainv_l(rank, rank))
+     !$ACC ENTER DATA CREATE(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank**2)
      
 #ifndef _OPENACC
@@ -557,8 +560,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 #else
 
 #ifdef _RSE_USE_CUBLAS_DGEMM
-     !$ACC ENTER DATA CREATE(HL_l(:,:), RiHL_l(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-     !$ACC UPDATE DEVICE(HL_l(:,:), RiHL_l(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
+     !$ACC UPDATE DEVICE(HL_l(:,:), RiHL_l(:,:)) ASYNC(accStreamId)
      !$ACC WAIT(accStreamId)
 
      !$ACC HOST_DATA USE_DEVICE(HL_l, RiHL_l, tmp_Ainv_l)
@@ -568,13 +570,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
                           0.0d0, tmp_Ainv_l, rank)
      !$ACC END HOST_DATA     
      ierror = cudaStreamSynchronize( cudaStream )
-
-     !$ACC UPDATE HOST(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-     !$ACC EXIT DATA DELETE(HL_l(:,:), RiHL_l(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-     !$ACC WAIT(accStreamId)
+     
 #else
-     !$ACC ENTER DATA CREATE(HL_l(:,:), RiHL_l(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-     !$ACC UPDATE DEVICE(HL_l(:,:), RiHL_l(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
+     !$ACC UPDATE DEVICE(HL_l(:,:), RiHL_l(:,:)) ASYNC(accStreamId)
     
      !$ACC PARALLEL LOOP GANG VECTOR COLLAPSE(2) DEFAULT(PRESENT) PRIVATE(kCell) ASYNC(accStreamId)
      DO jCol = 1, rank
@@ -589,15 +587,14 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
         ENDDO
      ENDDO
-     !$ACC END PARALLEL LOOP
-
-     !$ACC UPDATE HOST(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-     !$ACC EXIT DATA DELETE(HL_l(:,:), RiHL_l(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
+     !$ACC END PARALLEL LOOP     
      !$ACC WAIT(accStreamId)
 #endif
 
 #endif
 
+     !$ACC EXIT DATA DELETE(HL_l) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      DEALLOCATE(HL_l)
      CALL PDAF_timeit(51, 'old')
 
@@ -639,17 +636,15 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   CALL PDAF_timeit(51, 'new')
 #ifndef _OPENACC
   Ainv_l = forget * Ainv_l + tmp_Ainv_l
-#else
-  !$ACC ENTER DATA CREATE(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-  !$ACC UPDATE DEVICE(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
+#else  
+  ! !$ACC UPDATE DEVICE(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
   !$ACC PARALLEL LOOP GANG VECTOR COLLAPSE(2) DEFAULT(PRESENT) ASYNC(accStreamId)
   DO jCol = 1, rank
     DO iRow = 1, rank
         Ainv_l(iRow, jCol) = forget * Ainv_l(iRow, jCol) + tmp_Ainv_l(iRow, jCol)
     END DO
   END DO
-  !$ACC END PARALLEL LOOP
-  !$ACC EXIT DATA DELETE(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
+  !$ACC END PARALLEL LOOP  
   !$ACC WAIT(accStreamId)
 #endif
   CALL PDAF_timeit(51, 'old')
@@ -673,19 +668,32 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
   ! *** Compute RiHLd = RiHL^T d ***
   ALLOCATE(RiHLd_l(rank))
+  !$ACC ENTER DATA CREATE(RiHLd_l(:)) ASYNC(accStreamId)     
+  !$ACC WAIT(accStreamId)
   IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank)
 
   haveobsC: IF (dim_obs_l > 0) THEN
      ! *** RiHLd_p/=0 only with observations ***
 
-     ! WRITE(0,*) 'RSE: GEMV #1'
+#ifndef _OPENACC
+
      CALL gemvTYPE('t', dim_obs_l, rank, 1.0, RiHL_l, &
           dim_obs_l, resid_l, 1, 0.0, RiHLd_l, 1)
+
+#else     
+
+     !$ACC HOST_DATA USE_DEVICE(RiHL_l, resid_l, RiHLd_l)
+     ierror = cublasDgemv(handleCuBlas, CUBLAS_OP_T, dim_obs_l, rank, 1.0, &
+                          RiHL_l, dim_obs_l, resid_l, 1, 0.0d0, RiHLd_l, 1)
+     !$ACC END HOST_DATA
+     ierror = cudaStreamSynchronize( cudaStream )
+     
+#endif
 
      IF (debug>0) &
           WRITE (*,*) '++ PDAF-debug PDAF_lestkf_analysis:', debug, '  (HXT_l R^-1)^T d_l', RiHLd_l
 
-     !$ACC EXIT DATA DELETE(resid_l) ASYNC(accStreamId)
+     !$ACC EXIT DATA DELETE(RiHL_l, resid_l) ASYNC(accStreamId)
      !$ACC WAIT(accStreamId)
      DEALLOCATE(RiHL_l, resid_l)
 
@@ -742,6 +750,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      ! *** Variant 2: Invert Ainv using SVD
 
      ALLOCATE(svals(rank))
+     !$ACC ENTER DATA CREATE(svals(:)) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      
 #ifndef _OPENACC
 
@@ -758,9 +768,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
 #else
 
-     !$ACC ENTER DATA CREATE(svals(:)) ASYNC(accStreamId)
-     !$ACC UPDATE DEVICE(svals(:)) ASYNC(accStreamId)
-     !$ACC WAIT(accStreamId)
+     ! !$ACC UPDATE DEVICE(svals(:)) ASYNC(accStreamId)
+     ! !$ACC WAIT(accStreamId)
 
      !$ACC HOST_DATA USE_DEVICE(Ainv_l, svals)
      ! jobz = CUSOLVER_EIG_MODE_NOVECTOR || CUSOLVER_EIG_MODE_VECTOR
@@ -786,8 +795,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      !$ACC END HOST_DATA
      ierror = cudaStreamSynchronize( cudaStream )
 
-     !$ACC UPDATE HOST(svals(:), lib_info) ASYNC(accStreamId)
-     !$ACC EXIT DATA DELETE(svals(:), work(:), lib_info) ASYNC(accStreamId)
+     !$ACC UPDATE HOST(lib_info) ASYNC(accStreamId)
+     !$ACC EXIT DATA DELETE(work(:), lib_info) ASYNC(accStreamId)
      !$ACC WAIT(accStreamId)
 
 #endif
@@ -800,6 +809,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
              WRITE (*,*) '++ PDAF-debug PDAF_lestkf_analysis:', debug, '  eigenvalues', svals
 
         ALLOCATE(VRiHLd_l(rank))
+        !$ACC ENTER DATA CREATE(VRiHLd_l(:)) ASYNC(accStreamId)     
+        !$ACC WAIT(accStreamId)
         IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank)
 
 #ifndef _OPENACC
@@ -814,10 +825,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
         CALL gemvTYPE('n', rank, rank, 1.0, Ainv_l, &
              rank, VRiHLd_l, 1, 0.0, RiHLd_l, 1)
 
-#else
-
-        !$ACC ENTER DATA CREATE(RiHLd_l(:), VRiHLd_l(:), svals(:))
-        !$ACC UPDATE DEVICE(RiHLd_l(:), VRiHLd_l(:), svals(:))
+#else        
 
         !$ACC HOST_DATA USE_DEVICE(Ainv_l, RiHLd_l, VRiHLd_l)
         ierror = cublasDgemv(handleCuBlas, CUBLAS_OP_T, rank, rank, 1.0, &
@@ -836,13 +844,12 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
         ierror = cublasDgemv(handleCuBlas, CUBLAS_OP_N, rank, rank, 1.0, &
                              Ainv_l, rank, VRiHLd_l, 1, 0.0d0, RiHLd_l, 1)
         !$ACC END HOST_DATA
-        ierror = cudaStreamSynchronize( cudaStream )
-
-        !$ACC UPDATE HOST(RiHLd_l(:), VRiHLd_l(:))
-        !$ACC EXIT DATA DELETE(RiHLd_l(:), VRiHLd_l(:), svals(:))
+        ierror = cudaStreamSynchronize( cudaStream )        
 
 #endif
 
+        !$ACC EXIT DATA DELETE(VRiHLd_l(:)) ASYNC(accStreamId)     
+        !$ACC WAIT(accStreamId)
         DEALLOCATE(VRiHLd_l)
      END IF
   END IF typeainv1
@@ -878,6 +885,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
      ! allocate fields
      ALLOCATE(OmegaT(rank, dim_ens))
+     !$ACC ENTER DATA CREATE(OmegaT(:,:)) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', rank * dim_ens)
 
      IF (mype == 0 .AND. screen > 0 .AND. screenout) THEN
@@ -922,18 +931,14 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      ELSE typeainv2
         ! Variant, if SVD inversion of Ainv has been performed
 
-        ! Use OmegaT as temporary array
-        !$ACC ENTER DATA CREATE(OmegaT(:,:), svals(:)) ASYNC(accStreamId)
-        !$ACC UPDATE DEVICE(OmegaT(:,:), svals(:)) ASYNC(accStreamId)
+        ! Use OmegaT as temporary array        
         !$ACC PARALLEL LOOP GANG VECTOR DEFAULT(PRESENT) COLLAPSE(2) ASYNC(accStreamId)
         DO col = 1, rank
            DO row = 1, rank
               OmegaT(row, col) = Ainv_l(row, col) / SQRT(svals(col))
            END DO
         END DO
-        !$ACC END PARALLEL LOOP
-        !$ACC UPDATE HOST(OmegaT(:,:)) ASYNC(accStreamId)
-        !$ACC EXIT DATA DELETE(OmegaT(:,:), svals(:)) ASYNC(accStreamId)
+        !$ACC END PARALLEL LOOP        
         !$ACC WAIT(accStreamId)
 
 #ifndef _OPENACC
@@ -941,11 +946,6 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
              1.0, OmegaT, rank, Ainv_l, rank, &
              0.0, tmp_Ainv_l, rank)
 #else
-        ! WRITE(0,*) 'RSE: DGEMM #2'
-        !$ACC ENTER DATA CREATE(OmegaT(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-        !$ACC UPDATE DEVICE(OmegaT(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-        !$ACC WAIT(accStreamId)
-
         !$ACC HOST_DATA USE_DEVICE(OmegaT, Ainv_l, tmp_Ainv_l)
         ierror = cublasDgemm(handleCuBlas, CUBLAS_OP_N, CUBLAS_OP_T, rank, rank, rank, &
                              1.0d0, OmegaT, rank, &
@@ -953,13 +953,11 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
                              0.0d0, tmp_Ainv_l, rank)
         !$ACC END HOST_DATA
 
-        ierror = cudaStreamSynchronize( cudaStream )
-
-        !$ACC UPDATE HOST(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-        !$ACC EXIT DATA DELETE(OmegaT(:,:), tmp_Ainv_l(:,:)) ASYNC(accStreamId)
-        !$ACC WAIT(accStreamId)
+        ierror = cudaStreamSynchronize( cudaStream )        
 #endif        
         
+        !$ACC EXIT DATA DELETE(svals(:)) ASYNC(accStreamId)
+        !$ACC WAIT(accStreamId)
         DEALLOCATE(svals)
 
         ! Set flag
@@ -996,11 +994,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
         CALL gemmTYPE('n', 'n', rank, dim_ens, rank, &
              1.0, tmp_Ainv_l, rank, OmegaT_in, rank, &
              0.0, OmegaT, rank)
-#else    
-        !$ACC ENTER DATA CREATE(tmp_Ainv_l(:,:), OmegaT(:,:)) ASYNC(accStreamId)
-        !$ACC UPDATE DEVICE(tmp_Ainv_l(:,:), OmegaT(:,:)) ASYNC(accStreamId)
-        !$ACC WAIT(accStreamId)
-
+#else        
         !$ACC HOST_DATA USE_DEVICE(tmp_Ainv_l, OmegaT_in, OmegaT)
         ierror = cublasDgemm(handleCuBlas, CUBLAS_OP_N, CUBLAS_OP_N, rank, dim_ens, rank, &
                              1.0d0, tmp_Ainv_l, rank, &
@@ -1008,11 +1002,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
                              0.0d0, OmegaT, rank)
         !$ACC END HOST_DATA
 
-        ierror = cudaStreamSynchronize( cudaStream )
-
-        !$ACC UPDATE HOST(OmegaT(:,:)) ASYNC(accStreamId)
-        !$ACC EXIT DATA DELETE(tmp_Ainv_l(:,:), OmegaT(:,:)) ASYNC(accStreamId)
-        !$ACC WAIT(accStreamId)
+        ierror = cudaStreamSynchronize( cudaStream )        
 #endif
 
         lib_info = 0
@@ -1047,17 +1037,13 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
      IF (incremental /= 2) THEN
         
-        !$ACC ENTER DATA CREATE(OmegaT(:,:), RiHLd_l(:)) ASYNC(accStreamId)
-        !$ACC UPDATE DEVICE(OmegaT(:,:), RiHLd_l(:)) ASYNC(accStreamId)
         !$ACC PARALLEL LOOP GANG VECTOR COLLAPSE(2) DEFAULT(PRESENT) ASYNC(accStreamId)
         DO j = 1, dim_ens
            DO i = 1, rank
               OmegaT(i, j) = fac * OmegaT(i, j) + RiHLd_l(i)
            END DO
         END DO
-        !$ACC END PARALLEL LOOP
-        !$ACC UPDATE HOST(OmegaT(:,:)) ASYNC(accStreamId)
-        !$ACC EXIT DATA DELETE(OmegaT(:,:), RiHLd_l(:)) ASYNC(accStreamId)
+        !$ACC END PARALLEL LOOP        
         !$ACC WAIT(accStreamId)
 
      ELSE
@@ -1075,6 +1061,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
      END IF
 
+     !$ACC EXIT DATA DELETE(RiHLd_l) ASYNC(accStreamId)     
+     !$ACC WAIT(accStreamId)
      DEALLOCATE(RiHLd_l)
       
      ! *** Omega A^T (A^T stored in OmegaT_l) ***
@@ -1082,12 +1070,9 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 #ifndef _OPENACC
      CALL PDAF_estkf_OmegaA(rank, dim_ens, OmegaT, TA)
 #else
-     !$ACC ENTER DATA CREATE(OmegaT(:,:)) ASYNC(accStreamId)
-     !$ACC UPDATE DEVICE(OmegaT(:,:)) ASYNC(accStreamId)
-     !$ACC WAIT(accStreamId)
+     ! RUN ON GPU
      CALL PDAF_estkf_OmegaA(rank, dim_ens, OmegaT, TA, accStreamId)
-     !$ACC EXIT DATA DELETE(OmegaT(:,:)) ASYNC(accStreamId)
-     !$ACC WAIT(accStreamId)
+     ! RUN ON GPU     
 #endif
      ! WRITE(0,*) '**************** RSE: EXIT PDAF_estkf_OmegaA #1'
 
@@ -1108,6 +1093,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 
      ALLOCATE(ens_blk(maxblksize, dim_ens))
      !$ACC ENTER DATA CREATE(ens_blk(:,:)) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      IF (allocflag == 0) CALL PDAF_memcount(3, 'r', maxblksize * dim_ens)
 
      ! WRITE(0,*) "RSE: blocking: blklower = 1,", dim_l, ",", maxblksize
@@ -1166,10 +1152,13 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      END DO blocking
 
      !$ACC UPDATE HOST(ens_l(:,:)) ASYNC(accStreamId)        
+     
      !$ACC EXIT DATA DELETE(ens_blk(:,:)) ASYNC(accStreamId)
      !$ACC WAIT(accStreamId)
      DEALLOCATE(ens_blk)
 
+     !$ACC EXIT DATA DELETE(OmegaT(:,:)) ASYNC(accStreamId)
+     !$ACC WAIT(accStreamId)
      DEALLOCATE(OmegaT)
 
   END IF check3
@@ -1195,6 +1184,8 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 ! *** Finishing up ***
 ! ********************
 
+  !$ACC EXIT DATA DELETE(tmp_Ainv_l)
+  !$ACC WAIT(accStreamId)
   DEALLOCATE(tmp_Ainv_l)
 
   IF (allocflag == 0) allocflag = 1

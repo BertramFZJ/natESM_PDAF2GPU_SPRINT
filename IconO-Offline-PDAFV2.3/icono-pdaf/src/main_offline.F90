@@ -53,7 +53,9 @@ PROGRAM MAIN
        ONLY: timeit, time_tot
   USE mod_memcount, &     ! Counting allocated memory
        ONLY: memcount, memcount_ini, memcount_get
+
   USE talcc_c_bindings, only: printAffinityBindingC, setAffinityBindingC
+  USE mo_mem_worspaces, only: memInitLibrary, memSetOmpNumThreads, memAllocateAnalysisHeap
 
   IMPLICIT NONE
 
@@ -91,6 +93,20 @@ PROGRAM MAIN
   IF (mype_world == 0) THEN
     WRITE(*,*) 'NATESM: OPENACC ENABLED ==> ', _OPENACC, ' DEVICE COUNT = ', acc_get_num_devices(acc_device_nvidia)
   ENDIF
+#endif
+
+#if 1
+  CALL memInitLibrary()
+#ifdef _OPENMP
+  !$OMP PARALLEL
+  !$OMP MASTER
+  CALL memSetOmpNumThreads( OMP_GET_NUM_THREADS() )
+  !$OMP END MASTER
+  !$OMP END PARALLEL
+#else
+  CALL memSetOmpNumThreads( 1 )
+#endif
+  CALL memAllocateAnalysisHeap( 65536, numaInitFlag = .TRUE., accEnterDataFlag = .TRUE.)
 #endif
 
 ! ********************************
