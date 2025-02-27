@@ -1,4 +1,10 @@
 ! #define _RSE_USE_CUBLAS_DGEMM
+#define _RSE_ALLOCATE_SUBROUTINE_PARAMETERS_
+
+#define _RSE_CHECK_DnDsyevd_BUFFER_SIZE
+#ifndef _RSE_CHECK_DnDsyevd_BUFFER_SIZE
+#define _RSE_DnDsyevd_BUFFER_SIZE 39616
+#endif
 
 ! Copyright (c) 2004-2024 Lars Nerger
 !
@@ -283,11 +289,13 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
   ENDIF
   accMemRefCounter = 1
 
+#ifdef _RSE_ALLOCATE_SUBROUTINE_PARAMETERS_
   !$ACC ENTER DATA CREATE(state_l(:), Ainv_l(:,:), ens_l(:,:), TA(:,:)) &
   !$ACC            CREATE(OmegaT_in(:,:)) ASYNC(accStreamId)
   ! Currently not used on GPU :: HX_f(:,:) + HXbar_f(:) + state_inc_l(:) ==> IN
   !$ACC UPDATE DEVICE(OmegaT_in(:,:)) ASYNC(accStreamId)
   !$ACC WAIT(accStreamId)
+#endif
 #endif
   ! Allocating GPU memory for arrays passed to the subroutine as parameters
 
@@ -637,7 +645,6 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 #ifndef _OPENACC
   Ainv_l = forget * Ainv_l + tmp_Ainv_l
 #else  
-  ! !$ACC UPDATE DEVICE(tmp_Ainv_l(:,:)) ASYNC(accStreamId)
   !$ACC PARALLEL LOOP GANG VECTOR COLLAPSE(2) DEFAULT(PRESENT) ASYNC(accStreamId)
   DO jCol = 1, rank
     DO iRow = 1, rank
@@ -771,6 +778,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
      ! !$ACC UPDATE DEVICE(svals(:)) ASYNC(accStreamId)
      ! !$ACC WAIT(accStreamId)
 
+#ifdef _RSE_CHECK_DnDsyevd_BUFFER_SIZE
      !$ACC HOST_DATA USE_DEVICE(Ainv_l, svals)
      ! jobz = CUSOLVER_EIG_MODE_NOVECTOR || CUSOLVER_EIG_MODE_VECTOR
      ! uplo = CUBLAS_FILL_MODE_UPPER || CUBLAS_FILL_MODE_LOWER
@@ -779,6 +787,10 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
                                           rank, Ainv_l, rank, svals, ldwork)
      !$ACC END HOST_DATA
      ierror = cudaStreamSynchronize( cudaStream )
+     ! WRITE(0,*) 'NATSEM LDWORK: ', ldwork
+#else
+     ldwork = _RSE_DnDsyevd_BUFFER_SIZE
+#endif
      
      ALLOCATE( work(ldwork) )
      !$ACC ENTER DATA CREATE( work(:) , lib_info) ASYNC(accStreamId)
@@ -1184,7 +1196,7 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 ! *** Finishing up ***
 ! ********************
 
-  !$ACC EXIT DATA DELETE(tmp_Ainv_l)
+  !$ACC EXIT DATA DELETE(tmp_Ainv_l) ASYNC(accStreamId)
   !$ACC WAIT(accStreamId)
   DEALLOCATE(tmp_Ainv_l)
 
@@ -1197,11 +1209,13 @@ SUBROUTINE PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
 #ifdef _OPENACC
   accMemRefCounter = 0
 
+#ifdef _RSE_ALLOCATE_SUBROUTINE_PARAMETERS_
   !$ACC UPDATE HOST(Ainv_l(:,:), TA(:,:)) ASYNC(accStreamId)
   !$ACC EXIT DATA DELETE(state_l(:), Ainv_l(:,:), ens_l(:,:), TA(:,:)) &
   !$ACC           DELETE(OmegaT_in(:,:)) ASYNC(accStreamId)
   ! Currently not used on GPU :: HX_f(:,:) + HXbar_f(:) + state_inc_l(:) ==> IN
   !$ACC WAIT(accStreamId)
+#endif
 #endif
   ! Deallocating GPU memory for arrays passed to the subroutine as parameters
 

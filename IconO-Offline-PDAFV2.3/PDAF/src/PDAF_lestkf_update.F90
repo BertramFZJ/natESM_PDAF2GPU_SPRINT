@@ -1,3 +1,5 @@
+! #define _RSE_ALLOCATE_SUBROUTINE_PARAMETERS_
+
 ! Copyright (c) 2004-2024 Lars Nerger
 !
 ! This file is part of PDAF.
@@ -161,6 +163,8 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
   REAL, ALLOCATABLE :: Ainv_l(:,:) ! thread-local matrix Ainv
 
   ! #################################################################################################
+
+  INTEGER :: accStreamId
 
   DOUBLE PRECISION :: rseTimerStart, rseTimerFinish, rseTimerTotal, rseTimerMin, rseTimerMax
   DOUBLE PRECISION :: rseTimerStartThread, rseTimerFinishThread, rseTimerTotalThread(0:255)
@@ -420,7 +424,16 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
 !$OMP PARALLEL default(shared) private(dim_l, dim_obs_l, ens_l, state_l, stateinc_l, TA_l, Ainv_l, flag, forget_ana_l) &
 !$OMP private( rseTimerStartThread,  rseTimerFinishThread) &
 !$OMP private(rseTimerStartThread7, rseTimerFinishThread7, rseTimerLocalThread7) &
-!$OMP private(rseTimerStartThread9, rseTimerFinishThread9, rseTimerLocalThread9, rseIterCountThreadLocal)
+!$OMP private(rseTimerStartThread9, rseTimerFinishThread9, rseTimerLocalThread9, rseIterCountThreadLocal) &
+!$OMP private(accStreamId)
+  
+#ifdef _RSE_ALLOCATE_SUBROUTINE_PARAMETERS_
+#ifdef _OPENMP
+  accStreamId = omp_get_thread_num() + 1
+#else
+  accStreamId = 1
+#endif
+#endif
 
   forget_ana_l = forget_ana
 
@@ -540,6 +553,16 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
      havelocalobs: IF (dim_obs_l > 0) THEN
 
         IF (subtype /= 3) THEN
+
+#ifdef _OPENACC
+#ifdef _RSE_ALLOCATE_SUBROUTINE_PARAMETERS_
+           !$ACC ENTER DATA CREATE(state_l(:), Ainv_l(:,:), ens_l(:,:), TA_l(:,:)) &
+           !$ACC            CREATE(OmegaT(:,:)) ASYNC(accStreamId)
+           !$ACC UPDATE DEVICE(OmegaT(:,:)) ASYNC(accStreamId)
+           !$ACC WAIT(accStreamId)
+#endif
+#endif
+
            rseTimerStartThread7 = MPI_WTIME()
            ! LESTKF analysis for current domain
            CALL PDAF_lestkf_analysis(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
@@ -548,6 +571,16 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
                 U_init_obs_l, U_prodRinvA_l, U_init_obsvar_l, U_init_n_domains_p, screen, &
                 incremental, type_forget, type_sqrt, TA_l, flag)
            rseTimerLocalThread7 = rseTimerLocalThread7 + MPI_WTIME() - rseTimerStartThread7
+
+#ifdef _OPENACC
+#ifdef _RSE_ALLOCATE_SUBROUTINE_PARAMETERS_
+           !$ACC UPDATE HOST(Ainv_l(:,:), TA_l(:,:)) ASYNC(accStreamId)
+           !$ACC EXIT DATA DELETE(state_l(:), Ainv_l(:,:), ens_l(:,:), TA_l(:,:)) &
+           !$ACC           DELETE(OmegaT(:,:)) ASYNC(accStreamId)  
+           !$ACC WAIT(accStreamId)
+#endif
+#endif
+
         ELSE
            ! LESTKF analysis with state update but no ensemble transformation
            CALL PDAF_lestkf_analysis_fixed(domain_p, step, dim_l, dim_obs_f, dim_obs_l, &
@@ -633,7 +666,7 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
   rseTimerTotalThread9(omp_get_thread_num()) = rseTimerLocalThread9
     rseIterCountThread(omp_get_thread_num()) = rseIterCountThreadLocal
 
-  !$OMP BARRIER
+  !$OMP BARRIER  
 
   IF (debug>0 .and. n_domains_p>0) &
        WRITE (*,*) '++ PDAF-debug: ', debug, 'PDAF_lestkf_update -- End of local analysis loop'
@@ -664,6 +697,8 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
   DO iLOOP = 0, (OMPNUMTHREADS - 1)
     WRITE(0,'(1x, a, I3, a, F7.2, 3x, F7.2, 3x, I9)') 'NATESM TH ', iLOOP, ' TIMER : ', rseTimerTotalThread7(iLOOP), rseTimerTotalThread9(iLOOP), rseIterCountThread(iLOOP)
   END DO
+  WRITE(0,'(1x, a, F7.2, a, F7.2)') 'NATESM => ANALYSIS 7 ', SUM(rseTimerTotalThread7(0:(OMPNUMTHREADS - 1))), &
+                                    ' NATESM => ANALYSIS 9 ', SUM(rseTimerTotalThread9(0:(OMPNUMTHREADS - 1)))
   ! ######################################################################################################################################################
 
   ! *** Print statistics for local analysis to the screen ***
