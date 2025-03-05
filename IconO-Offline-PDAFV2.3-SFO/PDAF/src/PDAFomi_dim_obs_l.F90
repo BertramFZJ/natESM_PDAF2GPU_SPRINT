@@ -235,72 +235,18 @@ CONTAINS
 
        norm: IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
             ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==0)) THEN
-
+          WRITE(0,*) "DEBUG RSE: ##0"
           ! *** Compute Cartesian distance ***          
 
-          IF (thisobs%ncoord==3) THEN
-             dists(3) = ABS(coordsA(3) - coordsB(3))
-             IF (dists(3)>thisobs_l%cradius(3)) THEN
-                distflag = .FALSE.
-             ELSE
-                dists(2) = ABS(coordsA(2) - coordsB(2))
-                IF (dists(2)>thisobs_l%cradius(2)) THEN
-                   distflag = .FALSE.
-                ELSE
-                   dists(1) = ABS(coordsA(1) - coordsB(1))
-                   IF (dists(1)>thisobs_l%cradius(1)) THEN
-                      distflag = .FALSE.
-                   ELSE
-                      ! full squared distance
-                      distance2 = 0.0
-                      IF (thisobs%disttype<10) THEN
-                         ! full 3D localization
-                         DO k = 1, thisobs%ncoord
-                            distance2 = distance2 + dists(k)*dists(k)
-                         END DO
-                      ELSE
-                         ! factorized 2+1D localization
-                         DO k = 1, thisobs%ncoord-1
-                            distance2 = distance2 + dists(k)*dists(k)
-                         END DO
-                      END IF
-                   END IF
-                END IF
-             END IF
-          ELSEIF (thisobs%ncoord==2) THEN
-             dists(2) = ABS(coordsA(2) - coordsB(2))
-             IF (dists(2)>thisobs_l%cradius(2)) THEN
-                distflag = .FALSE.
-             ELSE
-                dists(1) = ABS(coordsA(1) - coordsB(1))
-                IF (dists(1)>thisobs_l%cradius(1)) THEN
-                   distflag = .FALSE.
-                ELSE
-                   ! full squared distance
-                   distance2 = 0.0
-                   DO k = 1, thisobs%ncoord
-                      distance2 = distance2 + dists(k)*dists(k)
-                   END DO
-                END IF
-             END IF
-          ELSEIF (thisobs%ncoord==1) THEN
-             dists(1) = ABS(coordsA(1) - coordsB(1))
-             IF (dists(1)>thisobs_l%cradius(1)) THEN
-                distflag = .FALSE.
-             ELSE
-                ! full squared distance
-                distance2 = 0.0
-                DO k = 1, thisobs%ncoord
-                   distance2 = distance2 + dists(k)*dists(k)
-                END DO
-             END IF
-          END IF
-
        ELSEIF ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==1) THEN norm
+
+          ! WRITE(0,*) "DEBUG RSE: ###5"
 
           ! *** Compute periodic Cartesian distance ***          
 
           IF (thisobs%ncoord==3) THEN
+             ! WRITE(0,*) "DEBUG RSE: ###6"
+             
              IF (thisobs%domainsize(3)<=0.0) THEN 
                 dists(3) = ABS(coordsA(3) - coordsB(3))
              ELSE
@@ -345,176 +291,18 @@ CONTAINS
                 END IF
              END IF
           ELSEIF (thisobs%ncoord==2) THEN
-             IF (thisobs%domainsize(2)<=0.0) THEN 
-                dists(2) = ABS(coordsA(2) - coordsB(2))
-             ELSE
-                dists(2) = MIN(ABS(coordsA(2) - coordsB(2)), &
-                     ABS(ABS(coordsA(2) - coordsB(2))-thisobs%domainsize(2)))
-             END IF
-             IF (dists(2)>thisobs_l%cradius(2)) THEN
-                distflag = .FALSE.
-             ELSE
-                IF (thisobs%domainsize(1)<=0.0) THEN 
-                   dists(1) = ABS(coordsA(1) - coordsB(1))
-                ELSE
-                   dists(1) = MIN(ABS(coordsA(1) - coordsB(1)), &
-                        ABS(ABS(coordsA(1) - coordsB(1))-thisobs%domainsize(1)))
-                END IF
-                IF (dists(1)>thisobs_l%cradius(1)) THEN
-                   distflag = .FALSE.
-                ELSE
-                   ! full squared distance
-                   distance2 = 0.0
-                   DO k = 1, thisobs%ncoord
-                      distance2 = distance2 + dists(k)*dists(k)
-                   END DO
-                END IF
-             END IF
+             WRITE(0,*) "DEBUG RSE: ###7"
+             
           ELSEIF (thisobs%ncoord==1) THEN
-             IF (thisobs%domainsize(1)<=0.0) THEN 
-                dists(1) = ABS(coordsA(1) - coordsB(1))
-             ELSE
-                dists(1) = MIN(ABS(coordsA(1) - coordsB(1)), &
-                     ABS(ABS(coordsA(1) - coordsB(1))-thisobs%domainsize(1)))
-             END IF
-             IF (dists(1)>thisobs_l%cradius(1)) THEN
-                distflag = .FALSE.
-             ELSE
-                ! full squared distance
-                distance2 = 0.0
-                DO k = 1, thisobs%ncoord
-                   distance2 = distance2 + dists(k)*dists(k)
-                END DO
-             END IF
+             WRITE(0,*) "DEBUG RSE: ###8"
+             
           END IF
 
        ELSEIF (thisobs%disttype==2 .OR. thisobs%disttype==12) THEN norm
-
-          ! *** Compute distance from geographic coordinates ***          
-
-          IF (thisobs%ncoord==3) THEN
-             dists(3) = ABS(coordsA(3) - coordsB(3))
-             IF (dists(3)>thisobs_l%cradius(3)) THEN
-                distflag = .FALSE.
-             ELSE
-                dists(2) = r_earth * ABS(coordsA(2) - coordsB(2))
-                IF (dists(2)>thisobs_l%cradius(2)) THEN
-                   distflag = .FALSE.
-                ELSE
-                   dists(1) = r_earth * MIN( ABS(coordsA(1) - coordsB(1))* COS(coordsA(2)), &
-                        ABS(ABS(coordsA(1) - coordsB(1)) - 2.0*pi) * COS(coordsA(2)))
-                   IF (dists(1)>thisobs_l%cradius(1)) THEN
-                      distflag = .FALSE.
-                   ELSE
-                      ! full squared distance
-                      distance2 = 0.0
-                      IF (thisobs%disttype<10) THEN
-                         ! full 3D localization
-                         DO k = 1, thisobs%ncoord
-                            distance2 = distance2 + dists(k)*dists(k)
-                         END DO
-                      ELSE
-                         ! factorized 2+1D localization
-                         DO k = 1, thisobs%ncoord-1
-                            distance2 = distance2 + dists(k)*dists(k)
-                         END DO
-                      END IF
-                   END IF
-                END IF
-             END IF
-          ELSE
-             dists(2) = r_earth * ABS(coordsA(2) - coordsB(2))
-             IF (dists(2)>thisobs_l%cradius(2)) THEN
-                distflag = .FALSE.
-             ELSE
-                dists(1) = r_earth * MIN( ABS(coordsA(1) - coordsB(1))* COS(coordsA(2)), &
-                     ABS(ABS(coordsA(1) - coordsB(1)) - 2.0*pi) * COS(coordsA(2)))
-                IF (dists(1)>thisobs_l%cradius(1)) THEN
-                   distflag = .FALSE.
-                ELSE
-                   ! full squared distance
-                   distance2 = 0.0
-                   DO k = 1, thisobs%ncoord
-                      distance2 = distance2 + dists(k)*dists(k)
-                   END DO
-                END IF
-             END IF
-          END IF
+          WRITE(0,*) "DEBUG RSE: ###9"          
 
        ELSEIF (thisobs%disttype==3 .OR. thisobs%disttype==13) THEN norm
-
-          ! *** Compute distance from geographic coordinates with haversine formula ***          
-
-          IF (thisobs%ncoord==3) THEN
-             dists(3) = ABS(coordsA(3) - coordsB(3))
-             IF (dists(3)>thisobs_l%cradius(3)) THEN
-                distflag = .FALSE.
-             ELSE
-                dists(2) = r_earth * ABS(coordsA(2) - coordsB(2))
-                IF (dists(2)>thisobs_l%cradius(2)) THEN
-                   distflag = .FALSE.
-                ELSE
-                   dists(1) = r_earth * MIN( ABS(coordsA(1) - coordsB(1))* COS(coordsA(2)), &
-                        ABS(ABS(coordsA(1) - coordsB(1)) - 2.0*pi) * COS(coordsA(2)))
-
-                   ! Haversine formula
-                   slon = SIN((coordsA(1) - coordsB(1))/2)
-                   slat = SIN((coordsA(2) - coordsB(2))/2)
-
-                   dists(2) = SQRT(slat*slat + COS(coordsA(2))*COS(coordsB(2))*slon*slon)
-                   IF (dists(2)<=1.0) THEN
-                      dists(2) = 2.0 * r_earth* ASIN(dists(2))
-                   ELSE
-                      dists(2) = r_earth* pi
-                   END IF
-                   IF (dists(2)>thisobs_l%cradius(1)) THEN
-                      distflag = .FALSE.
-                   ELSE
-                      ! full squared distance
-                      distance2 = 0.0
-                      IF (thisobs%disttype<10) THEN
-                         ! full 3D localization
-                         DO k = 2, thisobs%ncoord
-                            distance2 = distance2 + dists(k)*dists(k)
-                         END DO
-                      ELSE
-                         ! factorized 2+1D localization
-                         DO k = 2, thisobs%ncoord-1
-                            distance2 = distance2 + dists(k)*dists(k)
-                         END DO
-                      END IF
-                   END IF
-                END IF
-             END IF
-          ELSE
-             dists(2) = r_earth * ABS(coordsA(2) - coordsB(2))
-             IF (dists(2)>thisobs_l%cradius(2)) THEN
-                distflag = .FALSE.
-             ELSE
-                dists(1) = r_earth * MIN( ABS(coordsA(1) - coordsB(1))* COS(coordsA(2)), &
-                     ABS(ABS(coordsA(1) - coordsB(1)) - 2.0*pi) * COS(coordsA(2)))
-
-                ! Haversine formula
-                slon = SIN((coordsA(1) - coordsB(1))/2)
-                slat = SIN((coordsA(2) - coordsB(2))/2)
-
-                dists(2) = SQRT(slat*slat + COS(coordsA(2))*COS(coordsB(2))*slon*slon)
-                IF (dists(2)<=1.0) THEN
-                   dists(2) = 2.0 * r_earth* ASIN(dists(2))
-                ELSE
-                   dists(2) = r_earth* pi
-                END IF
-                IF (dists(2)>thisobs_l%cradius(1)) THEN
-                   distflag = .FALSE.
-                ELSE
-                   ! full squared distance
-                   distance2 = 0.0
-                   DO k = 1, thisobs%ncoord
-                      distance2 = distance2 + dists(k)*dists(k)
-                   END DO
-                END IF
-             END IF
-          END IF
+          WRITE(0,*) "DEBUG RSE: ###12"
 
        END IF norm
 
@@ -525,6 +313,8 @@ CONTAINS
 
        dflag: IF (distflag) THEN
           nrad: IF (thisobs_l%nradii == 2 .OR. (thisobs_l%nradii == 3 .AND. thisobs%disttype >= 10)) THEN
+             
+             ! WRITE(0,*) "DEBUG RSE: ###20"
 
              IF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .OR. &
                   (thisobs_l%sradius(1) == thisobs_l%sradius(2))) THEN
@@ -582,141 +372,19 @@ CONTAINS
              END IF
 
           ELSE IF (thisobs_l%nradii == 3  .AND. thisobs%disttype < 10) THEN nrad
+             
+             WRITE(0,*) "DEBUG RSE: ###21"
 
-             ! To save computing time, we here distinguish whether 
-             ! - the horizontal radii are equal and only direction 3 has a different radius
-             ! - whether all radii are equal (isotropic but specified with separate radii)
-             ! - the anisotropy is in all 3 dimensions (all radii different)
-
-             aniso: IF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
-                  (thisobs_l%cradius(1) /= thisobs_l%cradius(3)) .AND. &
-                  (thisobs_l%sradius(1) == thisobs_l%sradius(2))) THEN
-
-                ! *** Isotropic in horizontal direction, distinct radius in the third direction (vertical) ***
-
-                dist_xy = SQRT(dists(1)*dists(1) + dists(2)*dists(2))
-
-                ! 2D anisotropy: Polar radius of ellipse in 2 dimensions
-
-                ! Compute angle
-                IF (dist_xy /= 0.0) THEN
-                   theta = ATAN(dists(3) / dist_xy)
-                ELSE
-                   theta = pi / 2.0
-                END IF
-
-                ! Compute radius in direction of theta
-                IF (thisobs_l%cradius(1)>0.0 .OR. thisobs_l%cradius(3)>0.0) THEN
-                   cradius = thisobs_l%cradius(1) * thisobs_l%cradius(3) / &
-                        SQRT( (thisobs_l%cradius(3)*COS(theta))**2  &
-                        + (thisobs_l%cradius(1)*SIN(theta))**2 )
-                ELSE
-                   cradius = 0.0
-                END IF
-
-                cradius2 = cradius * cradius
-
-                IF (distance2 <= cradius2) THEN
-                   ! Set flag for valid observation
-                   checkdist = .TRUE.
-                   cnt_obs = cnt_obs + 1
-
-                   ! Compute support radius in direction of theta
-                   IF (thisobs_l%sradius(1)>0.0 .OR. thisobs_l%sradius(3)>0.0) THEN
-                      sradius = thisobs_l%sradius(1) * thisobs_l%sradius(3) / &
-                           SQRT( (thisobs_l%sradius(3)*COS(theta))**2 &
-                           + (thisobs_l%sradius(1)*SIN(theta))**2 )
-                   ELSE
-                      sradius = 0.0
-                   END IF
-                   
-                END IF
-
-             ELSEIF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
-                  (thisobs_l%cradius(1) == thisobs_l%cradius(3)) .AND. &
-                  (thisobs_l%sradius(1) == thisobs_l%sradius(2)) .AND. &
-                  (thisobs_l%sradius(2) == thisobs_l%sradius(3))) THEN aniso
-
-                ! *** 3D isotropic case (all radii equal) ***
-
-                cradius = thisobs_l%cradius(1)
-                cradius2 = thisobs_l%cradius(1) * thisobs_l%cradius(1)
-                sradius = thisobs_l%sradius(1)
-
-                IF (distance2 <= cradius2) THEN
-                   ! Set flag for valid observation
-                   checkdist = .TRUE.
-                   cnt_obs = cnt_obs + 1
-                END IF
-                
-             ELSE aniso
-
-                ! *** general 3D anisotropic case ***
-
-                ! Polar radius of ellipsoid in 3 dimensions
-
-                ! Compute angle in x-y direction
-                IF (dists(1) /= 0.0) THEN
-                   theta = ATAN(dists(2) / dists(1))
-                ELSE
-                   theta = pi / 2.0
-                END IF
-
-                ! Distance in xy-plane
-                dist_xy = SQRT(dists(1)**2 + dists(2)**2)
-
-                ! Compute angle of xy-plane to z direction
-                IF (dist_xy /= 0.0) THEN
-                   phi = ATAN(dists(3) / dist_xy)
-                ELSE
-                   phi = 0.0
-                END IF
-
-                ! Compute radius in direction of theta
-                IF (thisobs_l%cradius(1)>0.0 .OR. thisobs_l%cradius(2)>0.0 .OR. thisobs_l%cradius(3)>0.0) THEN
-                   cradius = thisobs_l%cradius(1) * thisobs_l%cradius(2) * thisobs_l%cradius(3) / &
-                        SQRT( (thisobs_l%cradius(2)*thisobs_l%cradius(3)*COS(phi)*COS(theta))**2 &
-                        + (thisobs_l%cradius(1)*thisobs_l%cradius(3)*COS(phi)*SIN(theta))**2 &
-                        + (thisobs_l%cradius(1)*thisobs_l%cradius(2)*SIN(phi))**2 )
-                ELSE
-                   cradius = 0.0
-                END IF
-
-                cradius2 = cradius * cradius
-
-                IF (distance2 <= cradius2) THEN
-                   ! Set flag for valid observation
-                   checkdist = .TRUE.
-                   cnt_obs = cnt_obs + 1
-
-                   ! Compute support radius in direction of theta
-                   IF (thisobs_l%sradius(1)>0.0 .OR. thisobs_l%sradius(2)>0.0 .OR. thisobs_l%sradius(3)>0.0) THEN
-                      sradius = thisobs_l%sradius(1) * thisobs_l%sradius(2) * thisobs_l%sradius(3) / &
-                           SQRT( (thisobs_l%sradius(2)*thisobs_l%sradius(3)*COS(phi)*COS(theta))**2 &
-                           + (thisobs_l%sradius(1)*thisobs_l%sradius(3)*COS(phi)*SIN(theta))**2 &
-                           + (thisobs_l%sradius(1)*thisobs_l%sradius(2)*SIN(phi))**2 )
-                   ELSE
-                      sradius = 0.0
-                   END IF
-                   
-                END IF
-
-             END IF aniso
           ELSEIF (thisobs_l%nradii == 1) THEN nrad
-             cradius = thisobs_l%cradius(1)
-             cradius2 = thisobs_l%cradius(1) * thisobs_l%cradius(1)
-             sradius = thisobs_l%sradius(1)
 
-             IF (distance2 <= cradius2) THEN
-                ! Set flag for valid observation
-                checkdist = .TRUE.
-                cnt_obs = cnt_obs + 1
-             END IF
+             WRITE(0,*) "DEBUG RSE: ###22"
 
           END IF nrad
 
           IF (mode==2 .AND. checkdist) THEN
+             ! WRITE(0,*) "DEBUG RSE: ###23"
              ! For internal storage (use in prodRinvA_l and likelihood_l)
+
              thisobs_l%id_obs_l(cnt_obs) = i                       ! node index
              thisobs_l%distance_l(cnt_obs) = SQRT(distance2)       ! distance
              thisobs_l%cradius_l(cnt_obs) = cradius                ! directional cut-off radius
