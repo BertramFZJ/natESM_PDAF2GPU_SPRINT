@@ -122,7 +122,7 @@ SUBROUTINE init_dim_obs_l_pdafomi(domain_p, step, dim_obs, dim_obs_l)
   INTEGER, INTENT(in)  :: dim_obs    !< Full dimension of observation vector
   INTEGER, INTENT(out) :: dim_obs_l  !< Local dimension of observation vector
 
-  WRITE(0,*) "RSE: ENTER init_dim_obs_l_pdafomi"
+  ! WRITE(0,*) "RSE: ENTER init_dim_obs_l_pdafomi"
 
 ! **********************************************
 ! *** Initialize local observation dimension ***
@@ -132,7 +132,7 @@ SUBROUTINE init_dim_obs_l_pdafomi(domain_p, step, dim_obs, dim_obs_l)
   CALL init_dim_obs_l_EN4_tho(domain_p, step, dim_obs, dim_obs_l)
   CALL init_dim_obs_l_EN4_sao(domain_p, step, dim_obs, dim_obs_l)
 
-  WRITE(0,*) "RSE: EXIT  init_dim_obs_l_pdafomi"
+  ! WRITE(0,*) "RSE: EXIT  init_dim_obs_l_pdafomi"
 
 END SUBROUTINE init_dim_obs_l_pdafomi
 

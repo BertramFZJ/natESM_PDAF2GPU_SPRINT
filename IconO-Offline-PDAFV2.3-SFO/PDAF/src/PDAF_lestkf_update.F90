@@ -474,11 +474,11 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
      ! Get observation dimension for local domain
      CALL PDAF_timeit(9, 'new')
      rseTimerStartThread9 = MPI_WTIME()
-     WRITE(0,*)
-     WRITE(0,*) "RSE: UPDATE: ENTER U_init_dim_obs_l"
+     ! WRITE(0,*)
+     ! WRITE(0,*) "RSE: UPDATE: ENTER U_init_dim_obs_l"
      dim_obs_l = 0
      CALL U_init_dim_obs_l(domain_p, step, dim_obs_f, dim_obs_l)
-     WRITE(0,*) "RSE: UPDATE: EXIT U_init_dim_obs_l"     
+     ! WRITE(0,*) "RSE: UPDATE: EXIT U_init_dim_obs_l"     
      rseIterCountThreadLocal = rseIterCountThreadLocal + 1
      rseTimerLocalThread9 = rseTimerLocalThread9 + MPI_WTIME() - rseTimerStartThread9
      CALL PDAF_timeit(9, 'old')

@@ -526,7 +526,7 @@ CONTAINS
 ! *** Local variables ***
     REAL :: lradius_3d(3), sradius_3d(3) ! non-isotropic localization radii
 
-    WRITE(0,*) "RSE: ENTER init_dim_obs_l_EN4_sao"
+    ! WRITE(0,*) "RSE: ENTER init_dim_obs_l_EN4_sao"
 
 ! **********************************************
 ! *** Initialize local observation dimension ***
@@ -545,19 +545,19 @@ CONTAINS
 
     IF (.NOT.iso_loc) THEN
        ! Use non-isotropic localization
-       WRITE(0,*) "RSE: ENTER init_dim_obs_l_EN4_sao noniso branch"
+       ! WRITE(0,*) "RSE: ENTER init_dim_obs_l_EN4_sao noniso branch"
        CALL PDAFomi_init_dim_obs_l(thisobs_l, thisobs, coords_l, &
          locweight, lradius_3d, sradius_3d, dim_obs_l)
-       WRITE(0,*) "RSE: EXIT  init_dim_obs_l_EN4_sao noniso branch"
+       ! WRITE(0,*) "RSE: EXIT  init_dim_obs_l_EN4_sao noniso branch"
     ELSE
        ! Use isoptropic localization (usually needs scaling of vertical coordinates)
-       WRITE(0,*) "RSE: ENTER init_dim_obs_l_EN4_sao iso branch"
+       ! WRITE(0,*) "RSE: ENTER init_dim_obs_l_EN4_sao iso branch"
        CALL PDAFomi_init_dim_obs_l(thisobs_l, thisobs, coords_l, &
             locweight, cradius, cradius, dim_obs_l)
-       WRITE(0,*) "RSE: EXIT  init_dim_obs_l_EN4_sao iso branch"
+       ! WRITE(0,*) "RSE: EXIT  init_dim_obs_l_EN4_sao iso branch"
     END IF
 
-    WRITE(0,*) "RSE: EXIT  init_dim_obs_l_EN4_sao"
+    ! WRITE(0,*) "RSE: EXIT  init_dim_obs_l_EN4_sao"
 
   END SUBROUTINE init_dim_obs_l_EN4_sao
 

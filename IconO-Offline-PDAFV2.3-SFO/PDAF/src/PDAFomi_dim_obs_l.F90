@@ -67,7 +67,7 @@ CONTAINS
     REAL :: maxocoords_l, minocoords_l       ! Min/Max observation coordinates to check geographic coords
     INTEGER :: cnt_obs                       ! Counter for valid local observations
 
-    WRITE(0,*) "RSE: ENTER PDAFomi_init_dim_obs_l_noniso"
+    ! WRITE(0,*) "RSE: ENTER PDAFomi_init_dim_obs_l_noniso"
 
     doassim: IF (thisobs%doassim == 1) THEN
 
@@ -199,7 +199,7 @@ CONTAINS
 
     END IF doassim
 
-    WRITE(0,*) "RSE: EXIT  PDAFomi_init_dim_obs_l_noniso"
+    ! WRITE(0,*) "RSE: EXIT  PDAFomi_init_dim_obs_l_noniso"
 
   END SUBROUTINE PDAFomi_init_dim_obs_l_noniso
 
@@ -254,8 +254,8 @@ CONTAINS
 ! *** Initialization ***
 ! **********************
 
-    WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: ENTER PDAFomi_check_dist2_noniso_loop", &
-    thisobs%dim_obs_f, mode, cnt_obs
+    ! WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: ENTER PDAFomi_check_dist2_noniso_loop", &
+    !                                             thisobs%dim_obs_f, mode, cnt_obs
     scancount: DO i = 1, thisobs%dim_obs_f
 
        ! Initialize distance flag
@@ -826,8 +826,8 @@ CONTAINS
     END IF dflag
 
  END DO scancount
-  WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: EXIT  PDAFomi_check_dist2_noniso_loop", &
-  thisobs%dim_obs_f, mode, cnt_obs
+  ! WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: EXIT  PDAFomi_check_dist2_noniso_loop", &
+  !                                             thisobs%dim_obs_f, mode, cnt_obs
 
   END SUBROUTINE PDAFomi_check_dist2_noniso_loop
 
@@ -871,7 +871,7 @@ CONTAINS
     INTEGER, INTENT(inout) :: cnt_obs_l_all  !< Local dimension of observation vector over all obs. types
     INTEGER, INTENT(inout) :: cnt_obs_l      !< Local dimension of single observation type vector
 
-    WRITE(0,'(1x, a, 1x, I6, 1x, I6)') "RSE: ENTER PDAFomi_set_dim_obs_l", cnt_obs_l_all, cnt_obs_l
+    ! WRITE(0,'(1x, a, 1x, I6, 1x, I6)') "RSE: ENTER PDAFomi_set_dim_obs_l", cnt_obs_l_all, cnt_obs_l
 
     ! Store ID of first observation type that calls the routine
     ! This is reset in PDAFomi_deallocate_obs
@@ -927,7 +927,7 @@ CONTAINS
        ALLOCATE(thisobs_l%dist_l_v(1))
     END IF haveobs
 
-    WRITE(0,'(1x, a, 1x, I6, 1x, I6)') "RSE: EXIT  PDAFomi_set_dim_obs_l", cnt_obs_l_all, cnt_obs_l
+    ! WRITE(0,'(1x, a, 1x, I6, 1x, I6)') "RSE: EXIT  PDAFomi_set_dim_obs_l", cnt_obs_l_all, cnt_obs_l
 
   END SUBROUTINE PDAFomi_set_dim_obs_l
 
