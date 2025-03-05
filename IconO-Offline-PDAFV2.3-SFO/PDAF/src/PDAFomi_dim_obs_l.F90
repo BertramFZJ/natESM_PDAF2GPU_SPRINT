@@ -74,21 +74,15 @@ CONTAINS
 ! ***********************************************
 ! *** Check offset in full observation vector ***
 ! ***********************************************
-
-       IF (debug>0) &
-            WRITE (*,*) '++ OMI-debug: ', debug, 'PDAFomi_init_dim_obs_l_noniso -- START'
-
+       
        ! Check consistency of dimensions
-       IF (SIZE(cradius) /= thisobs%ncoord) THEN
-          WRITE (*,*) '+++++ ERROR PDAF-OMI: non-isotropic localization: Size of CRADIUS /= thisobs%ncoord'
+       IF (SIZE(cradius) /= thisobs%ncoord) THEN          
           error = 12
        END IF
-       IF (SIZE(sradius) /= thisobs%ncoord) THEN
-          WRITE (*,*) '+++++ ERROR PDAF-OMI: non-isotropic localization: Size of SRADIUS /= thisobs%ncoord'
+       IF (SIZE(sradius) /= thisobs%ncoord) THEN          
           error = 13
        END IF
-       IF (thisobs%ncoord/=3 .AND. thisobs%disttype>=10) THEN
-          WRITE (*,*) '+++++ ERROR PDAF-OMI: factorized 2+1D localization can only be used for thisobs%ncoord=3'
+       IF (thisobs%ncoord/=3 .AND. thisobs%disttype>=10) THEN          
           error = 14
        END IF
 
@@ -112,46 +106,19 @@ CONTAINS
 
 ! **************************************
 ! *** Count valid local observations ***
-! **************************************
-
-       IF (debug>0) THEN
-          WRITE (*,*) '++ OMI-debug: ', debug, &
-               '   PDAFomi_init_dim_obs_l_noniso -- count local observations'
-          IF (thisobs%obsid == firstobs) THEN
-             WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso:', debug, '  Re-init dim_obs_l=0'
-          END IF
-          WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso:', debug, '  coords_l', coords_l
-
-          ! For geographic coordinates check whether their range is reasonable
-          IF (thisobs%disttype==2 .OR. thisobs%disttype==3 .OR. thisobs%disttype==12 .OR. thisobs%disttype==13) THEN
-             maxcoords_l = MAXVAL(coords_l)
-             mincoords_l = MINVAL(coords_l)
-             maxocoords_l = MAXVAL(thisobs%ocoord_f(1:2, :))
-             minocoords_l = MINVAL(thisobs%ocoord_f(1:2, :))
-
-             IF (maxcoords_l>2.0*pi .OR. mincoords_l<-pi .OR. maxocoords_l>2.0*pi .OR. minocoords_l<-pi) THEN
-                WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso:', debug, &
-                     '  WARNING: The unit for geographic coordinates is radian, thus range (0,2*pi) or (-pi,pi)!'
-             END IF
-          END IF
-          WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso:', debug, &
-               '  Note: Please ensure that coords_l and observation coordinates have the same unit'
-
-          WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso: ', debug, '  thisobs%ncoord', thisobs%ncoord
-          WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso: ', debug, '  thisobs_l%cradius', thisobs_l%cradius
-          WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso: ', debug, '  Check for observations within radius'
-       END IF
+! **************************************       
 
        cnt_obs = 0
        IF (thisobs_l%nradii==1) THEN
           ! 1D but with radius specified as array
+          STOP "RSE: INTERRUPT #1"
           CALL PDAFomi_check_dist2_loop(thisobs_l, thisobs, coords_l, cnt_obs, 1)
        ELSEIF (thisobs_l%nradii==2 .OR. thisobs_l%nradii==3) THEN
           ! Nonisotropic in 2 or 3 dimensions
           CALL PDAFomi_check_dist2_noniso_loop(thisobs_l, thisobs, coords_l, cnt_obs, 1)
-       ELSE
-          WRITE (*,*) '+++++ ERROR PDAF-OMI: nonisotropic localization is only possible in 1, 2 or 3 dimensions'
+       ELSE          
           error = 10
+          STOP "RSE: INTERRUPT #2"
        END IF
 
 
@@ -165,11 +132,7 @@ CONTAINS
 ! ************************************************************
 ! *** Initialize internal local arrays for local distances ***
 ! *** and indices of local obs. in full obs. vector        ***
-! ************************************************************
-
-       IF (debug>0) &
-            WRITE (*,*) '++ OMI-debug: ', debug, &
-            '   PDAFomi_init_dim_obs_l_noniso -- initialize local observation arrays'
+! ************************************************************       
 
        ! Count local observations and initialize index and distance arrays
        IF (thisobs_l%dim_obs_l>0) THEN
@@ -177,25 +140,16 @@ CONTAINS
           cnt_obs = 0
           IF (thisobs_l%nradii==1) THEN
              ! 1D but with radius specified as array
+             STOP "RSE: INTERRUPT #3"
              CALL PDAFomi_check_dist2_loop(thisobs_l, thisobs, coords_l, cnt_obs, 2)
           ELSEIF (thisobs_l%nradii==2 .OR. thisobs_l%nradii==3) THEN
              ! Nonisotropic in 2 or 3 dimensions
              CALL PDAFomi_check_dist2_noniso_loop(thisobs_l, thisobs, coords_l, cnt_obs, 2)
-          ELSE
-             WRITE (*,*) '+++++ ERROR PDAF-OMI: nonisotropic localization is only possible in 1, 2 or 3 dimensions'
+          ELSE             
              error = 11
+             STOP "RSE: INTERRUPT #4"
           END IF
-       END IF
-
-       ! Print debug information
-       IF (debug>0) THEN
-          WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso:', debug, '  thisobs_l%dim_obs_l', thisobs_l%dim_obs_l
-          IF (thisobs_l%dim_obs_l>0) THEN
-             WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso:', debug, '  thisobs_l%id_obs_l', thisobs_l%id_obs_l
-             WRITE (*,*) '++ OMI-debug init_dim_obs_l_noniso:', debug, '  thisobs_l%distance_l', thisobs_l%distance_l
-          END IF
-          WRITE (*,*) '++ OMI-debug: ', debug, 'PDAFomi_init_dim_obs_l_noniso -- END'
-       END IF
+       END IF              
 
     END IF doassim
 
@@ -277,21 +231,12 @@ CONTAINS
           domsize = 0
        ELSE
           domsize = 1
-       END IF
-
-       ! Debug output
-       IF (debug>0 .AND. verbose==0) THEN
-          WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  use non-isotropic localization'
-       END IF
+       END IF       
 
        norm: IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
             ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==0)) THEN
 
-          ! *** Compute Cartesian distance ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  compute Cartesian distance'
-          END IF
+          ! *** Compute Cartesian distance ***          
 
           IF (thisobs%ncoord==3) THEN
              dists(3) = ABS(coordsA(3) - coordsB(3))
@@ -353,11 +298,7 @@ CONTAINS
 
        ELSEIF ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==1) THEN norm
 
-          ! *** Compute periodic Cartesian distance ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  compute periodic Cartesian distance'
-          END IF
+          ! *** Compute periodic Cartesian distance ***          
 
           IF (thisobs%ncoord==3) THEN
              IF (thisobs%domainsize(3)<=0.0) THEN 
@@ -449,11 +390,7 @@ CONTAINS
 
        ELSEIF (thisobs%disttype==2 .OR. thisobs%disttype==12) THEN norm
 
-          ! *** Compute distance from geographic coordinates ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  compute geographic distance'
-          END IF
+          ! *** Compute distance from geographic coordinates ***          
 
           IF (thisobs%ncoord==3) THEN
              dists(3) = ABS(coordsA(3) - coordsB(3))
@@ -506,12 +443,7 @@ CONTAINS
 
        ELSEIF (thisobs%disttype==3 .OR. thisobs%disttype==13) THEN norm
 
-          ! *** Compute distance from geographic coordinates with haversine formula ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso:    ', debug, &
-                  '  compute geographic distance using haversine function'
-          END IF
+          ! *** Compute distance from geographic coordinates with haversine formula ***          
 
           IF (thisobs%ncoord==3) THEN
              dists(3) = ABS(coordsA(3) - coordsB(3))
@@ -608,12 +540,6 @@ CONTAINS
                    cradius = thisobs_l%cradius(1)
                    sradius = thisobs_l%sradius(1)
 
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  2D isotropic with separately specified, but equal, radii'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                           theta*180/pi, cradius, sradius
-                   END IF
                 END IF
              ELSE
 
@@ -651,12 +577,6 @@ CONTAINS
                       sradius = 0.0
                    END IF
 
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  2D nonisotropic localization'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                           theta*180/pi, cradius, sradius
-                   END IF
                 END IF
 
              END IF
@@ -709,13 +629,7 @@ CONTAINS
                    ELSE
                       sradius = 0.0
                    END IF
-
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  3D: isotropic in directions 1 and 2, nonisotropic in direction 3'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                           theta*180/pi, cradius, sradius
-                   END IF
+                   
                 END IF
 
              ELSEIF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
@@ -734,13 +648,7 @@ CONTAINS
                    checkdist = .TRUE.
                    cnt_obs = cnt_obs + 1
                 END IF
-
-                IF (debug>0) THEN
-                   WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                        '  3D isotropic case specified with vector of radii'
-                   WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                        theta*180/pi, cradius, sradius
-                END IF
+                
              ELSE aniso
 
                 ! *** general 3D anisotropic case ***
@@ -790,13 +698,7 @@ CONTAINS
                    ELSE
                       sradius = 0.0
                    END IF
-
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  3D nonisotropic localization'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, phi, distance, cradius, sradius', &
-                           theta*180/pi, phi*180/pi, SQRT(distance2), cradius, sradius
-                   END IF
+                   
                 END IF
 
              END IF aniso
