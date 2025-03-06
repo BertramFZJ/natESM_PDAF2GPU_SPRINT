@@ -206,6 +206,7 @@ CONTAINS
 ! **********************
 ! *** RSE CODE BLOCK ***
 ! **********************
+    INTEGER :: local_cnt_obs
     domsize = 1
 
 ! **********************
@@ -328,12 +329,21 @@ CONTAINS
                   (thisobs_l%sradius(1) == thisobs_l%sradius(2))) THEN
                 ! 2D isotropic case
 
+                ! WRITE(0,*) "DEBUG RSE: ###30"
+
                 cradius2 = thisobs_l%cradius(1) * thisobs_l%cradius(1)
 
                 IF (distance2 <= cradius2) THEN
+                   
                    ! Set flag for valid observation
                    checkdist = .TRUE.
+
+                   ! ATOMIC
+                   local_cnt_obs = cnt_obs
                    cnt_obs = cnt_obs + 1
+                   ! ATOMIC
+
+                   local_cnt_obs = local_cnt_obs + 1                   
 
                    cradius = thisobs_l%cradius(1)
                    sradius = thisobs_l%sradius(1)
@@ -341,41 +351,7 @@ CONTAINS
                 END IF
              ELSE
 
-                ! *** 2D anisotropic case: Use polar radius of ellipse in 2 dimensions ***
-
-                ! Compute angle
-                IF (dists(1) /= 0.0) THEN
-                   theta = ATAN(dists(2) / dists(1))
-                ELSE
-                   theta = pi / 2.0
-                END IF
-
-                ! Compute radius in direction of theta
-                IF (thisobs_l%cradius(1)>0.0 .OR. thisobs_l%cradius(2)>0.0) THEN
-                   cradius = thisobs_l%cradius(1) * thisobs_l%cradius(2) / &
-                        SQRT( (thisobs_l%cradius(2)*COS(theta))**2  &
-                        + (thisobs_l%cradius(1)*SIN(theta))**2 )
-                ELSE
-                   cradius = 0.0
-                END IF
-
-                cradius2 = cradius * cradius
-
-                IF (distance2 <= cradius2) THEN
-                   ! Set flag for valid observation
-                   checkdist = .TRUE.
-                   cnt_obs = cnt_obs + 1
-
-                   ! Compute support radius in direction of theta
-                   IF (thisobs_l%sradius(1)>0.0 .OR. thisobs_l%sradius(2)>0.0) THEN
-                      sradius = thisobs_l%sradius(1) * thisobs_l%sradius(2) / &
-                           SQRT( (thisobs_l%sradius(2)*COS(theta))**2 &
-                           + (thisobs_l%sradius(1)*SIN(theta))**2 )
-                   ELSE
-                      sradius = 0.0
-                   END IF
-
-                END IF
+                WRITE(0,*) "DEBUG RSE: ###31"                
 
              END IF
 
@@ -393,12 +369,12 @@ CONTAINS
              ! WRITE(0,*) "DEBUG RSE: ###23"
              ! For internal storage (use in prodRinvA_l and likelihood_l)
 
-             thisobs_l%id_obs_l(cnt_obs) = i                       ! node index
-             thisobs_l%distance_l(cnt_obs) = SQRT(distance2)       ! distance
-             thisobs_l%cradius_l(cnt_obs) = cradius                ! directional cut-off radius
-             thisobs_l%sradius_l(cnt_obs) = sradius                ! directional support radius
+             thisobs_l%id_obs_l(local_cnt_obs) = i                       ! node index
+             thisobs_l%distance_l(local_cnt_obs) = SQRT(distance2)       ! distance
+             thisobs_l%cradius_l(local_cnt_obs) = cradius                ! directional cut-off radius
+             thisobs_l%sradius_l(local_cnt_obs) = sradius                ! directional support radius
              IF (thisobs_l%locweight_v>0 .AND. thisobs_l%nradii==3) THEN
-                thisobs_l%dist_l_v(cnt_obs) = dists(3)             ! distance in vertical direction
+                thisobs_l%dist_l_v(local_cnt_obs) = dists(3)             ! distance in vertical direction
              END if
           END IF
     END IF dflag
