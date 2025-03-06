@@ -189,7 +189,7 @@ CONTAINS
 
 ! *** Local variables ***
     INTEGER :: i, k                 ! Counters
-    INTEGER :: verbose              ! verbosity flag
+    ! INTEGER :: verbose              ! verbosity flag
     INTEGER :: domsize              ! Flag whether domainsize is set
     LOGICAL :: distflag             ! Flag whether distance in a coordinate direction is within cradius
     REAL :: slon, slat              ! sine of distance in longitude or latitude
@@ -203,6 +203,10 @@ CONTAINS
     REAL :: sradius                 ! Directional support radius
     LOGICAL :: checkdist            ! Flag whether distance is within cut-off radius
 
+! **********************
+! *** RSE CODE BLOCK ***
+! **********************
+    domsize = 1
 
 ! **********************
 ! *** Initialization ***
@@ -217,7 +221,7 @@ CONTAINS
        distflag = .TRUE.      ! Whether an observation lies within the local radius (ellipse, ellipsoid)
 
        ! Verbosity flag
-       verbose = i
+       ! verbose = i
 
        ! Observation coordinates
        coordsB = thisobs%ocoord_f(1:thisobs%ncoord, i)
@@ -227,11 +231,15 @@ CONTAINS
 ! *** Compute distance ***
 ! ************************
 
+#if 0
        IF (.NOT.ALLOCATED(thisobs%domainsize)) THEN
           domsize = 0
+          WRITE(0,*) "RSE: domsize = 0"
        ELSE
           domsize = 1
-       END IF       
+          WRITE(0,*) "RSE: domsize = 1"
+       END IF
+#endif       
 
        norm: IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
             ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==0)) THEN
