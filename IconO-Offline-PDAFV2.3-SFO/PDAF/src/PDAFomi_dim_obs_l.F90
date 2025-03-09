@@ -4,6 +4,8 @@ MODULE PDAFomi_dim_obs_l
   USE PDAFomi_obs_l, ONLY: obs_l, obs_l_all, firstobs, offset_obs_l
   USE PDAF_mod_filtermpi, ONLY: mype, npes_filter
 
+  USE omp_lib
+
   IMPLICIT NONE
   SAVE
 
@@ -197,8 +199,12 @@ CONTAINS
     REAL :: cradius2                ! cut-off radius on ellipse or ellipsoid
     REAL :: phi, theta              ! Angles in ellipse or ellipsoid
     REAL :: dist_xy                 ! Distance in xy-plan in 3D case
-    REAL :: dists(thisobs%ncoord)   ! Distance vector between analysis point and observation
-    REAL :: coordsB(thisobs%ncoord) ! Array for coordinates of a single observation
+
+    ! REAL :: dists(thisobs%ncoord)   ! Distance vector between analysis point and observation
+    ! REAL :: coordsB(thisobs%ncoord) ! Array for coordinates of a single observation
+    REAL :: dists(16)   ! Distance vector between analysis point and observation
+    REAL :: coordsB(16) ! Array for coordinates of a single observation
+
     REAL :: cradius                 ! Directional cut-off radius
     REAL :: sradius                 ! Directional support radius
     LOGICAL :: checkdist            ! Flag whether distance is within cut-off radius
@@ -207,7 +213,24 @@ CONTAINS
 ! *** RSE CODE BLOCK ***
 ! **********************
     INTEGER :: local_cnt_obs
+    INTEGER :: global_cnt_obs
+    INTEGER :: local_mode
+    LOGICAL :: allocFlags(16)
+    ! INTEGER :: iCounterRed0, iCounterRed1, checkCounterRed, checkCounterRed2, distCounterRed
+    INTEGER :: accStreamId
+    
     domsize = 1
+    local_mode = mode
+    global_cnt_obs = cnt_obs
+    ! iCounterRed0 = 0
+    ! iCounterRed1 = 0
+    ! checkCounterRed = 0
+    ! checkCounterRed2 = 0
+    ! distCounterRed = 0
+    allocFlags = .FALSE.
+
+    accStreamId = omp_get_thread_num() + 1
+    
 
 ! **********************
 ! *** Initialization ***
@@ -215,7 +238,32 @@ CONTAINS
 
     ! WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: ENTER PDAFomi_check_dist2_noniso_loop", &
     !                                             thisobs%dim_obs_f, mode, cnt_obs
+    ! WRITE(0,*) "   "
+    ! WRITE(0,*) thisobs%dim_obs_f
+
+    !$ACC ENTER DATA CREATE(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
+    !$ACC UPDATE     DEVICE(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
+    !$ACC ENTER DATA CREATE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
+    !$ACC UPDATE     DEVICE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
+    IF(ALLOCATED(thisobs_l%id_obs_l)) THEN
+        !$ACC ENTER DATA CREATE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
+        !$ACC            CREATE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
+        !$ACC UPDATE     DEVICE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
+        !$ACC            DEVICE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
+    ENDIF
+
+    !$ACC PARALLEL LOOP GANG VECTOR DEFAULT(PRESENT) &
+    !$ACC PRESENT(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) &
+    !$ACC PRESENT(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
+    !$ACC PRESENT(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) &
+    !$ACC PRESENT(thisobs_l, thisobs, global_cnt_obs, coordsA(:)) &
+    !$ACC PRIVATE(k, distflag, slon, slat, distance2, cradius2, phi, theta, dist_xy, dists(:)) &
+    !$ACC PRIVATE(coordsB(:), cradius, sradius, checkdist, local_cnt_obs) &
+    !$ACC FIRSTPRIVATE(local_mode,  domsize) &
+    !$ACC ASYNC(accStreamId)
     scancount: DO i = 1, thisobs%dim_obs_f
+
+       ! iCounterRed0 = iCounterRed0 + 1
 
        ! Initialize distance flag
        checkdist = .FALSE.    ! Whether an observation lies within the local box
@@ -231,16 +279,6 @@ CONTAINS
 ! ************************
 ! *** Compute distance ***
 ! ************************
-
-#if 0
-       IF (.NOT.ALLOCATED(thisobs%domainsize)) THEN
-          domsize = 0
-          WRITE(0,*) "RSE: domsize = 0"
-       ELSE
-          domsize = 1
-          WRITE(0,*) "RSE: domsize = 1"
-       END IF
-#endif       
 
        norm: IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
             ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==0)) THEN
@@ -262,6 +300,7 @@ CONTAINS
                 dists(3) = MIN(ABS(coordsA(3) - coordsB(3)), &
                      ABS(ABS(coordsA(3) - coordsB(3))-thisobs%domainsize(3)))
              END IF
+
              IF (dists(3)>thisobs_l%cradius(3)) THEN
                 distflag = .FALSE.
              ELSE
@@ -271,6 +310,7 @@ CONTAINS
                    dists(2) = MIN(ABS(coordsA(2) - coordsB(2)), &
                         ABS(ABS(coordsA(2) - coordsB(2))-thisobs%domainsize(2)))
                 END IF
+                
                 IF (dists(2)>thisobs_l%cradius(2)) THEN
                    distflag = .FALSE.
                 ELSE
@@ -287,14 +327,18 @@ CONTAINS
                       distance2 = 0.0
                       IF (thisobs%disttype<10) THEN
                          ! full 3D localization
+                         ! !$ACC LOOP SEQ
                          DO k = 1, thisobs%ncoord
                             distance2 = distance2 + dists(k)*dists(k)
                          END DO
+                         ! !$ACC END LOOP
                       ELSE
                          ! factorized 2+1D localization
+                         !$ACC LOOP SEQ
                          DO k = 1, thisobs%ncoord-1
                             distance2 = distance2 + dists(k)*dists(k)
                          END DO
+                         !$ACC END LOOP
                       END IF
                    END IF
                 END IF
@@ -320,7 +364,12 @@ CONTAINS
 ! *** Compute directional cut-off and support radii and set distance flag ***
 ! ***************************************************************************
 
+       ! iCounterRed1 = iCounterRed1 + 1
+
        dflag: IF (distflag) THEN
+
+        ! distCounterRed = distCounterRed + 1
+
           nrad: IF (thisobs_l%nradii == 2 .OR. (thisobs_l%nradii == 3 .AND. thisobs%disttype >= 10)) THEN
              
              ! WRITE(0,*) "DEBUG RSE: ###20"
@@ -337,13 +386,12 @@ CONTAINS
                    
                    ! Set flag for valid observation
                    checkdist = .TRUE.
+                   ! checkCounterRed = checkCounterRed + 1
 
-                   ! ATOMIC
-                   local_cnt_obs = cnt_obs
-                   cnt_obs = cnt_obs + 1
-                   ! ATOMIC
-
-                   local_cnt_obs = local_cnt_obs + 1                   
+                   !$ACC ATOMIC CAPTURE
+                   global_cnt_obs = global_cnt_obs + 1
+                   local_cnt_obs = global_cnt_obs
+                   !$ACC END ATOMIC
 
                    cradius = thisobs_l%cradius(1)
                    sradius = thisobs_l%sradius(1)
@@ -365,7 +413,10 @@ CONTAINS
 
           END IF nrad
 
-          IF (mode==2 .AND. checkdist) THEN
+          IF (local_mode==2 .AND. checkdist) THEN
+
+            ! checkCounterRed2 = checkCounterRed2 + 1
+
              ! WRITE(0,*) "DEBUG RSE: ###23"
              ! For internal storage (use in prodRinvA_l and likelihood_l)
 
@@ -373,15 +424,63 @@ CONTAINS
              thisobs_l%distance_l(local_cnt_obs) = SQRT(distance2)       ! distance
              thisobs_l%cradius_l(local_cnt_obs) = cradius                ! directional cut-off radius
              thisobs_l%sradius_l(local_cnt_obs) = sradius                ! directional support radius
-             IF (thisobs_l%locweight_v>0 .AND. thisobs_l%nradii==3) THEN
+             IF (thisobs_l%locweight_v>0 .AND. thisobs_l%nradii==3) THEN                
                 thisobs_l%dist_l_v(local_cnt_obs) = dists(3)             ! distance in vertical direction
              END if
           END IF
     END IF dflag
 
  END DO scancount
-  ! WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: EXIT  PDAFomi_check_dist2_noniso_loop", &
-  !                                             thisobs%dim_obs_f, mode, cnt_obs
+ ! !$ACC END PARALLEL LOOP
+
+ IF(ALLOCATED(thisobs_l%id_obs_l)) THEN
+    !$ACC UPDATE      HOST(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
+    !$ACC             HOST(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
+    !$ACC EXIT DATA DELETE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
+    !$ACC           DELETE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
+ ENDIF
+ !$ACC UPDATE      HOST(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
+ !$ACC EXIT DATA DELETE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
+ !$ACC UPDATE      HOST(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
+ !$ACC EXIT DATA DELETE(thisobs, thisobs_l, global_cnt_obs, coordsA) ASYNC(accStreamId)
+ !$ACC WAIT(accStreamId)
+
+ cnt_obs = global_cnt_obs 
+  
+ ! WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: EXIT  PDAFomi_check_dist2_noniso_loop", &
+ !                                             thisobs%dim_obs_f, mode, cnt_obs
+ 
+#if 0
+ IF(ALLOCATED(thisobs_l%id_obs_l  )) allocFlags( 1) = .TRUE.
+ IF(ALLOCATED(thisobs_l%distance_l)) allocFlags( 2) = .TRUE.
+ IF(ALLOCATED(thisobs_l%cradius_l )) allocFlags( 3) = .TRUE.
+ IF(ALLOCATED(thisobs_l%sradius_l )) allocFlags( 4) = .TRUE.
+ IF(ALLOCATED(thisobs_l%dist_l_v  )) allocFlags( 5) = .TRUE.
+ IF(ALLOCATED(thisobs_l%cradius   )) allocFlags( 6) = .TRUE.
+ IF(ALLOCATED(thisobs_l%sradius   )) allocFlags( 7) = .TRUE.
+ IF(ALLOCATED(thisobs%domainsize  )) allocFlags( 8) = .TRUE.
+ IF(ALLOCATED(thisobs%ocoord_f    )) allocFlags( 9) = .TRUE.
+ ! IF(ALLOCATED(coordsA           )) allocFlags(10) = .TRUE. 
+ WRITE(0,*) "ALLOCATE: ", allocFlags(1:9)
+ IF(ALLOCATED(thisobs_l%id_obs_l  )) WRITE(0,*) "thisobs_l%id_obs_l   ", SIZE(thisobs_l%id_obs_l  )
+ IF(ALLOCATED(thisobs_l%distance_l)) WRITE(0,*) "thisobs_l%distance_l ", SIZE(thisobs_l%distance_l)
+ IF(ALLOCATED(thisobs_l%cradius_l )) WRITE(0,*) "thisobs_l%cradius_l  ", SIZE(thisobs_l%cradius_l )
+ IF(ALLOCATED(thisobs_l%sradius_l )) WRITE(0,*) "thisobs_l%sradius_l  ", SIZE(thisobs_l%sradius_l )
+ IF(ALLOCATED(thisobs_l%dist_l_v  )) WRITE(0,*) "thisobs_l%dist_l_v   ", SIZE(thisobs_l%dist_l_v  )
+ IF(ALLOCATED(thisobs_l%cradius   )) WRITE(0,*) "thisobs_l%cradius    ", SIZE(thisobs_l%cradius   )
+ IF(ALLOCATED(thisobs_l%sradius   )) WRITE(0,*) "thisobs_l%sradius    ", SIZE(thisobs_l%sradius   )
+ IF(ALLOCATED(thisobs%domainsize  )) WRITE(0,*) "thisobs%domainsize   ", SIZE(thisobs%domainsize  )
+ IF(ALLOCATED(thisobs%ocoord_f    )) WRITE(0,*) "thisobs%ocoord_f     ", SIZE(thisobs%ocoord_f,  1), SIZE(thisobs%ocoord_f,   2)
+ IF(.TRUE.                         ) WRITE(0,*) "coordsA              ", SIZE(coordsA             ) 
+ WRITE(0,'(1x, a, 1x, I3, 1x, I6, 1x, I6, 1x, I6, 1x, I6, 1x, I6, 1x, I6)') "RSE: PDAFomi_check_dist2_noniso_loop ", &
+            mode, cnt_obs, iCounterRed0, iCounterRed1, distCounterRed, checkCounterRed, checkCounterRed2
+
+ IF(local_mode == 2 .AND. cnt_obs > 16) THEN
+    STOP "RSE EXIT"
+ END IF
+#endif
+
+ ! IF(local_mode == 2) WRITE(0,*) "RSE: PDAFomi_check_dist2_noniso_loop ", cnt_obs
 
   END SUBROUTINE PDAFomi_check_dist2_noniso_loop
 

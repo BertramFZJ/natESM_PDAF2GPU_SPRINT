@@ -449,6 +449,20 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
 !$OMP DO firstprivate(cnt_maxlag) lastprivate(cnt_maxlag) schedule(runtime)
   localanalysis: DO domain_p = 1, n_domains_p
 
+    IF(MOD(n_domains_p, 1000) < 3) THEN
+        WRITE(*,'(1x, a, 1x, F10.4, 1x, I16, 1x, I16)') "STATUS: ", &
+                  100.0 * REAL(domain_p) / REAL(n_domains_p), domain_p, n_domains_p
+        FLUSH(6)
+    ENDIF
+
+    IF(MOD(n_domains_p, 5000) < 2) THEN
+        WRITE(0,'(1x, a, 1x, F10.4, 1x, I16, 1x, I16)') "STATUS: ", &
+                  100.0 * REAL(domain_p) / REAL(n_domains_p), domain_p, n_domains_p
+        FLUSH(0)
+    ENDIF
+    ! WRITE(0,'(1x, a, 1x, F10.4, 1x, I16)') "STATUS: ", 100.0 * REAL(domain_p) / REAL(n_domains_p), n_domains_p
+    ! WRITE(*,'(1x, a, 1x, F10.4, 1x, I16)') "STATUS: ", 100.0 * REAL(domain_p) / REAL(n_domains_p), n_domains_p
+
      ! Set flag that we are in the local analysis loop
      inloop = .true.
 
