@@ -312,6 +312,7 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
   IF (debug>0) &
        WRITE (*,*) '++ PDAF-debug: ', debug, 'PDAF_lestkf_update -- call obs_op', dim_ens, 'times'
 
+  WRITE(0,*) "RSE: DO MEMEMBER LOOP ENTER"
   ENS: DO member = 1,dim_ens
      ! Store member index to make it accessible with PDAF_get_obsmemberid
      obs_member = member
@@ -319,6 +320,7 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
      ! Call observation operator
      CALL U_obs_op(step, dim_p, dim_obs_f, ens_p(:, member), HX_f(:, member))
   END DO ENS
+  WRITE(0,*) "RSE: DO MEMEMBER LOOP EXIT"
 
   CALL PDAF_timeit(44, 'old')
 
@@ -449,19 +451,11 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
 !$OMP DO firstprivate(cnt_maxlag) lastprivate(cnt_maxlag) schedule(runtime)
   localanalysis: DO domain_p = 1, n_domains_p
 
-    IF(MOD(n_domains_p, 1000) < 3) THEN
-        WRITE(*,'(1x, a, 1x, F10.4, 1x, I16, 1x, I16)') "STATUS: ", &
-                  100.0 * REAL(domain_p) / REAL(n_domains_p), domain_p, n_domains_p
-        FLUSH(6)
-    ENDIF
-
-    IF(MOD(n_domains_p, 5000) < 2) THEN
+    IF(MOD(domain_p, 100000) == 0) THEN
         WRITE(0,'(1x, a, 1x, F10.4, 1x, I16, 1x, I16)') "STATUS: ", &
                   100.0 * REAL(domain_p) / REAL(n_domains_p), domain_p, n_domains_p
         FLUSH(0)
     ENDIF
-    ! WRITE(0,'(1x, a, 1x, F10.4, 1x, I16)') "STATUS: ", 100.0 * REAL(domain_p) / REAL(n_domains_p), n_domains_p
-    ! WRITE(*,'(1x, a, 1x, F10.4, 1x, I16)') "STATUS: ", 100.0 * REAL(domain_p) / REAL(n_domains_p), n_domains_p
 
      ! Set flag that we are in the local analysis loop
      inloop = .true.

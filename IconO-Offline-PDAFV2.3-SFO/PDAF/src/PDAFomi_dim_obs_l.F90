@@ -215,22 +215,15 @@ CONTAINS
     INTEGER :: local_cnt_obs
     INTEGER :: global_cnt_obs
     INTEGER :: local_mode
-    LOGICAL :: allocFlags(16)
-    ! INTEGER :: iCounterRed0, iCounterRed1, checkCounterRed, checkCounterRed2, distCounterRed
+    LOGICAL :: allocFlags(16)    
     INTEGER :: accStreamId
     
     domsize = 1
     local_mode = mode
-    global_cnt_obs = cnt_obs
-    ! iCounterRed0 = 0
-    ! iCounterRed1 = 0
-    ! checkCounterRed = 0
-    ! checkCounterRed2 = 0
-    ! distCounterRed = 0
+    global_cnt_obs = cnt_obs    
     allocFlags = .FALSE.
 
-    accStreamId = omp_get_thread_num() + 1
-    
+    accStreamId = omp_get_thread_num() + 1    
 
 ! **********************
 ! *** Initialization ***
@@ -238,13 +231,22 @@ CONTAINS
 
     ! WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: ENTER PDAFomi_check_dist2_noniso_loop", &
     !                                             thisobs%dim_obs_f, mode, cnt_obs
-    ! WRITE(0,*) "   "
-    ! WRITE(0,*) thisobs%dim_obs_f
+    
+    IF( (local_mode == 2) .AND. (.NOT.ALLOCATED(thisobs_l%id_obs_l)) ) THEN
+        WRITE(0,*) "RSE: WARNING ##1"
+    END IF
 
+#if 0
     !$ACC ENTER DATA CREATE(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
     !$ACC UPDATE     DEVICE(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
     !$ACC ENTER DATA CREATE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
     !$ACC UPDATE     DEVICE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
+#else
+    !$ACC ENTER DATA CREATE(thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
+    !$ACC UPDATE     DEVICE(thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
+    !$ACC ENTER DATA CREATE(thisobs_l%cradius(:), thisobs_l%sradius(:)) ASYNC(accStreamId)
+    !$ACC UPDATE     DEVICE(thisobs_l%cradius(:), thisobs_l%sradius(:)) ASYNC(accStreamId)
+#endif
     IF(ALLOCATED(thisobs_l%id_obs_l)) THEN
         !$ACC ENTER DATA CREATE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
         !$ACC            CREATE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
@@ -261,16 +263,11 @@ CONTAINS
     !$ACC PRIVATE(coordsB(:), cradius, sradius, checkdist, local_cnt_obs) &
     !$ACC FIRSTPRIVATE(local_mode,  domsize) &
     !$ACC ASYNC(accStreamId)
-    scancount: DO i = 1, thisobs%dim_obs_f
-
-       ! iCounterRed0 = iCounterRed0 + 1
+    scancount: DO i = 1, thisobs%dim_obs_f       
 
        ! Initialize distance flag
        checkdist = .FALSE.    ! Whether an observation lies within the local box
-       distflag = .TRUE.      ! Whether an observation lies within the local radius (ellipse, ellipsoid)
-
-       ! Verbosity flag
-       ! verbose = i
+       distflag = .TRUE.      ! Whether an observation lies within the local radius (ellipse, ellipsoid)       
 
        ! Observation coordinates
        coordsB = thisobs%ocoord_f(1:thisobs%ncoord, i)
@@ -362,13 +359,9 @@ CONTAINS
 
 ! ***************************************************************************
 ! *** Compute directional cut-off and support radii and set distance flag ***
-! ***************************************************************************
+! ***************************************************************************       
 
-       ! iCounterRed1 = iCounterRed1 + 1
-
-       dflag: IF (distflag) THEN
-
-        ! distCounterRed = distCounterRed + 1
+       dflag: IF (distflag) THEN        
 
           nrad: IF (thisobs_l%nradii == 2 .OR. (thisobs_l%nradii == 3 .AND. thisobs%disttype >= 10)) THEN
              
@@ -415,9 +408,6 @@ CONTAINS
 
           IF (local_mode==2 .AND. checkdist) THEN
 
-            ! checkCounterRed2 = checkCounterRed2 + 1
-
-             ! WRITE(0,*) "DEBUG RSE: ###23"
              ! For internal storage (use in prodRinvA_l and likelihood_l)
 
              thisobs_l%id_obs_l(local_cnt_obs) = i                       ! node index
@@ -439,16 +429,26 @@ CONTAINS
     !$ACC EXIT DATA DELETE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
     !$ACC           DELETE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
  ENDIF
+
+#if 0
  !$ACC UPDATE      HOST(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
  !$ACC EXIT DATA DELETE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
  !$ACC UPDATE      HOST(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
  !$ACC EXIT DATA DELETE(thisobs, thisobs_l, global_cnt_obs, coordsA) ASYNC(accStreamId)
+#else
+#if 0
+ !$ACC EXIT DATA DELETE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
+ !$ACC UPDATE      HOST(thisobs_l, global_cnt_obs) ASYNC(accStreamId)
+ !$ACC EXIT DATA DELETE(thisobs, thisobs_l, global_cnt_obs, coordsA) ASYNC(accStreamId)
+#else
+ !$ACC EXIT DATA DELETE(thisobs_l%cradius(:), thisobs_l%sradius(:)) ASYNC(accStreamId)
+ !$ACC UPDATE      HOST(thisobs_l, global_cnt_obs) ASYNC(accStreamId)
+ !$ACC EXIT DATA DELETE(thisobs_l, global_cnt_obs, coordsA) ASYNC(accStreamId)
+#endif
+#endif
  !$ACC WAIT(accStreamId)
 
- cnt_obs = global_cnt_obs 
-  
- ! WRITE(0,'(1x, a, 1x, I6, 1x, I6, 1x, I6)') "RSE: EXIT  PDAFomi_check_dist2_noniso_loop", &
- !                                             thisobs%dim_obs_f, mode, cnt_obs
+ cnt_obs = global_cnt_obs  
  
 #if 0
  IF(ALLOCATED(thisobs_l%id_obs_l  )) allocFlags( 1) = .TRUE.
@@ -472,15 +472,8 @@ CONTAINS
  IF(ALLOCATED(thisobs%domainsize  )) WRITE(0,*) "thisobs%domainsize   ", SIZE(thisobs%domainsize  )
  IF(ALLOCATED(thisobs%ocoord_f    )) WRITE(0,*) "thisobs%ocoord_f     ", SIZE(thisobs%ocoord_f,  1), SIZE(thisobs%ocoord_f,   2)
  IF(.TRUE.                         ) WRITE(0,*) "coordsA              ", SIZE(coordsA             ) 
- WRITE(0,'(1x, a, 1x, I3, 1x, I6, 1x, I6, 1x, I6, 1x, I6, 1x, I6, 1x, I6)') "RSE: PDAFomi_check_dist2_noniso_loop ", &
-            mode, cnt_obs, iCounterRed0, iCounterRed1, distCounterRed, checkCounterRed, checkCounterRed2
-
- IF(local_mode == 2 .AND. cnt_obs > 16) THEN
-    STOP "RSE EXIT"
- END IF
-#endif
-
- ! IF(local_mode == 2) WRITE(0,*) "RSE: PDAFomi_check_dist2_noniso_loop ", cnt_obs
+ WRITE(0,'(1x, a, 1x, I3, 1x, I6)') "RSE: PDAFomi_check_dist2_noniso_loop ", mode, cnt_obs
+#endif 
 
   END SUBROUTINE PDAFomi_check_dist2_noniso_loop
 
