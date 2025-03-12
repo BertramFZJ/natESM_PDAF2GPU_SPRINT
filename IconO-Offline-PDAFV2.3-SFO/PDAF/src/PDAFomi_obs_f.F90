@@ -626,24 +626,13 @@ CONTAINS
 
     ! Set pointer to current observation
     obs_f_all(thisobs%obsid)%ptr => thisobs
-    ! WRITE(0,*) "RSE: SET POINTER ", thisobs%obsid, "FOR ", thisobs%dim_obs_f, " ", LOC(obs_f_all(thisobs%obsid)%ptr)
-
 #ifdef _OPENACC
     IF(acc_is_present(thisobs%ocoord_f(:,:)) .NEQV. .TRUE.) THEN
-#if 1
         !$ACC ENTER DATA CREATE(thisobs)
         !$ACC UPDATE DEVICE(thisobs)
         !$ACC ENTER DATA CREATE(thisobs%ocoord_f(:,:), thisobs%domainsize(:))
         !$ACC UPDATE DEVICE(thisobs%ocoord_f(:,:), thisobs%domainsize(:))
-#else
-        !$ACC ENTER DATA CREATE(obs_f_all(thisobs%obsid)%ptr)
-        !$ACC UPDATE DEVICE(obs_f_all(thisobs%obsid)%ptr)
-        !$ACC ENTER DATA CREATE(obs_f_all(thisobs%obsid)%ptr%ocoord_f(:,:), obs_f_all(thisobs%obsid)%ptr%domainsize(:))
-        !$ACC UPDATE DEVICE(obs_f_all(thisobs%obsid)%ptr%ocoord_f(:,:), obs_f_all(thisobs%obsid)%ptr%domainsize(:))
-#endif
-        WRITE(0,*) "CREATE thisobs ", thisobs%obsid, thisobs%dim_obs_f
-    ELSE
-        ! WRITE(0,*) "EXIST  thisobs ", thisobs%obsid, thisobs%dim_obs_f
+        WRITE(0,'(1x, a, 1x, I3, 1x, I6)') "NATESM: CREATE/UPDATE thisobs ON DEVICE", thisobs%obsid, thisobs%dim_obs_f
     ENDIF
 #endif
 

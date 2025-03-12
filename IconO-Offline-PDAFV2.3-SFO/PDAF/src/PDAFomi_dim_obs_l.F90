@@ -236,25 +236,16 @@ CONTAINS
         WRITE(0,*) "RSE: WARNING ##1"
     END IF
 
-#if 0
-    !$ACC ENTER DATA CREATE(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
-    !$ACC UPDATE     DEVICE(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
-    !$ACC ENTER DATA CREATE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
-    !$ACC UPDATE     DEVICE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
-#else
     !$ACC ENTER DATA CREATE(thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
     !$ACC UPDATE     DEVICE(thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
     !$ACC ENTER DATA CREATE(thisobs_l%cradius(:), thisobs_l%sradius(:)) ASYNC(accStreamId)
     !$ACC UPDATE     DEVICE(thisobs_l%cradius(:), thisobs_l%sradius(:)) ASYNC(accStreamId)
-#endif
     IF(ALLOCATED(thisobs_l%id_obs_l)) THEN
         !$ACC ENTER DATA CREATE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
-        !$ACC            CREATE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
-        !$ACC UPDATE     DEVICE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
-        !$ACC            DEVICE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
+        !$ACC            CREATE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)        
     ENDIF
 
-    !$ACC PARALLEL LOOP GANG VECTOR DEFAULT(PRESENT) &
+    !$ACC PARALLEL LOOP GANG VECTOR &
     !$ACC PRESENT(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) &
     !$ACC PRESENT(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
     !$ACC PRESENT(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) &
@@ -279,17 +270,15 @@ CONTAINS
 
        norm: IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
             ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==0)) THEN
-          WRITE(0,*) "DEBUG RSE: ##0"
-          ! *** Compute Cartesian distance ***          
+          ! INACTIVE CODE BRANCH
+          
+                ! *** Compute Cartesian distance ***          
 
-       ELSEIF ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==1) THEN norm
-
-          ! WRITE(0,*) "DEBUG RSE: ###5"
+       ELSEIF ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==1) THEN norm          
 
           ! *** Compute periodic Cartesian distance ***          
 
-          IF (thisobs%ncoord==3) THEN
-             ! WRITE(0,*) "DEBUG RSE: ###6"
+          IF (thisobs%ncoord==3) THEN             
              
              IF (thisobs%domainsize(3)<=0.0) THEN 
                 dists(3) = ABS(coordsA(3) - coordsB(3))
@@ -324,11 +313,11 @@ CONTAINS
                       distance2 = 0.0
                       IF (thisobs%disttype<10) THEN
                          ! full 3D localization
-                         ! !$ACC LOOP SEQ
+                         !$ACC LOOP SEQ
                          DO k = 1, thisobs%ncoord
                             distance2 = distance2 + dists(k)*dists(k)
                          END DO
-                         ! !$ACC END LOOP
+                         !$ACC END LOOP
                       ELSE
                          ! factorized 2+1D localization
                          !$ACC LOOP SEQ
@@ -341,18 +330,18 @@ CONTAINS
                 END IF
              END IF
           ELSEIF (thisobs%ncoord==2) THEN
-             WRITE(0,*) "DEBUG RSE: ###7"
+             ! INACTIVE CODE BRANCH
              
           ELSEIF (thisobs%ncoord==1) THEN
-             WRITE(0,*) "DEBUG RSE: ###8"
+             ! INACTIVE CODE BRANCH
              
           END IF
 
        ELSEIF (thisobs%disttype==2 .OR. thisobs%disttype==12) THEN norm
-          WRITE(0,*) "DEBUG RSE: ###9"          
+          ! INACTIVE CODE BRANCH
 
        ELSEIF (thisobs%disttype==3 .OR. thisobs%disttype==13) THEN norm
-          WRITE(0,*) "DEBUG RSE: ###12"
+          ! INACTIVE CODE BRANCH
 
        END IF norm
 
@@ -363,15 +352,11 @@ CONTAINS
 
        dflag: IF (distflag) THEN        
 
-          nrad: IF (thisobs_l%nradii == 2 .OR. (thisobs_l%nradii == 3 .AND. thisobs%disttype >= 10)) THEN
-             
-             ! WRITE(0,*) "DEBUG RSE: ###20"
+          nrad: IF (thisobs_l%nradii == 2 .OR. (thisobs_l%nradii == 3 .AND. thisobs%disttype >= 10)) THEN             
 
              IF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .OR. &
                   (thisobs_l%sradius(1) == thisobs_l%sradius(2))) THEN
-                ! 2D isotropic case
-
-                ! WRITE(0,*) "DEBUG RSE: ###30"
+                ! 2D isotropic case                
 
                 cradius2 = thisobs_l%cradius(1) * thisobs_l%cradius(1)
 
@@ -391,25 +376,20 @@ CONTAINS
 
                 END IF
              ELSE
-
-                WRITE(0,*) "DEBUG RSE: ###31"                
+                ! INACTIVE CODE BRANCH
 
              END IF
 
           ELSE IF (thisobs_l%nradii == 3  .AND. thisobs%disttype < 10) THEN nrad
-             
-             WRITE(0,*) "DEBUG RSE: ###21"
+            ! INACTIVE CODE BRANCH             
 
           ELSEIF (thisobs_l%nradii == 1) THEN nrad
-
-             WRITE(0,*) "DEBUG RSE: ###22"
+            ! INACTIVE CODE BRANCH             
 
           END IF nrad
 
           IF (local_mode==2 .AND. checkdist) THEN
-
              ! For internal storage (use in prodRinvA_l and likelihood_l)
-
              thisobs_l%id_obs_l(local_cnt_obs) = i                       ! node index
              thisobs_l%distance_l(local_cnt_obs) = SQRT(distance2)       ! distance
              thisobs_l%cradius_l(local_cnt_obs) = cradius                ! directional cut-off radius
@@ -421,31 +401,19 @@ CONTAINS
     END IF dflag
 
  END DO scancount
- ! !$ACC END PARALLEL LOOP
+ !$ACC END PARALLEL LOOP
 
  IF(ALLOCATED(thisobs_l%id_obs_l)) THEN
-    !$ACC UPDATE      HOST(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
-    !$ACC             HOST(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
+    IF(local_mode == 2) THEN
+        !$ACC UPDATE      HOST(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
+        !$ACC             HOST(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
+    END IF
     !$ACC EXIT DATA DELETE(thisobs_l%id_obs_l(:), thisobs_l%distance_l(:), thisobs_l%cradius_l(:)) &
     !$ACC           DELETE(thisobs_l%sradius_l(:), thisobs_l%dist_l_v(:)) ASYNC(accStreamId)
  ENDIF
-
-#if 0
- !$ACC UPDATE      HOST(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
- !$ACC EXIT DATA DELETE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
- !$ACC UPDATE      HOST(thisobs, thisobs_l, global_cnt_obs, coordsA(:)) ASYNC(accStreamId)
- !$ACC EXIT DATA DELETE(thisobs, thisobs_l, global_cnt_obs, coordsA) ASYNC(accStreamId)
-#else
-#if 0
- !$ACC EXIT DATA DELETE(thisobs_l%cradius(:), thisobs_l%sradius(:), thisobs%domainsize(:), thisobs%ocoord_f(:,:)) ASYNC(accStreamId)
- !$ACC UPDATE      HOST(thisobs_l, global_cnt_obs) ASYNC(accStreamId)
- !$ACC EXIT DATA DELETE(thisobs, thisobs_l, global_cnt_obs, coordsA) ASYNC(accStreamId)
-#else
  !$ACC EXIT DATA DELETE(thisobs_l%cradius(:), thisobs_l%sradius(:)) ASYNC(accStreamId)
  !$ACC UPDATE      HOST(thisobs_l, global_cnt_obs) ASYNC(accStreamId)
  !$ACC EXIT DATA DELETE(thisobs_l, global_cnt_obs, coordsA) ASYNC(accStreamId)
-#endif
-#endif
  !$ACC WAIT(accStreamId)
 
  cnt_obs = global_cnt_obs  

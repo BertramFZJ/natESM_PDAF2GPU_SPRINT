@@ -312,7 +312,7 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
   IF (debug>0) &
        WRITE (*,*) '++ PDAF-debug: ', debug, 'PDAF_lestkf_update -- call obs_op', dim_ens, 'times'
 
-  WRITE(0,*) "RSE: DO MEMEMBER LOOP ENTER"
+  WRITE(0,*) "RSE: DO MEMBER LOOP ENTER"
   ENS: DO member = 1,dim_ens
      ! Store member index to make it accessible with PDAF_get_obsmemberid
      obs_member = member
@@ -320,7 +320,7 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
      ! Call observation operator
      CALL U_obs_op(step, dim_p, dim_obs_f, ens_p(:, member), HX_f(:, member))
   END DO ENS
-  WRITE(0,*) "RSE: DO MEMEMBER LOOP EXIT"
+  WRITE(0,*) "RSE: DO MEMBER LOOP EXIT"
 
   CALL PDAF_timeit(44, 'old')
 
@@ -679,8 +679,8 @@ SUBROUTINE  PDAF_lestkf_update(step, dim_p, dim_obs_f, dim_ens, rank, &
   DO iLOOP = 0, (OMPNUMTHREADS - 1)
     WRITE(0,'(1x, a, I3, a, F7.2, 3x, F7.2, 3x, I9)') 'NATESM TH ', iLOOP, ' TIMER : ', rseTimerTotalThread7(iLOOP), rseTimerTotalThread9(iLOOP), rseIterCountThread(iLOOP)
   END DO
-  WRITE(0,'(1x, a, F7.2, a, F7.2)') 'NATESM => ANALYSIS 7 ', SUM(rseTimerTotalThread7(0:(OMPNUMTHREADS - 1))), &
-                                    ' NATESM => ANALYSIS 9 ', SUM(rseTimerTotalThread9(0:(OMPNUMTHREADS - 1)))
+  WRITE(0,'(1x, a, F10.2, a, F10.2)') 'NATESM => ANALYSIS 7 ', SUM(rseTimerTotalThread7(0:(OMPNUMTHREADS - 1))), &
+                                      ' NATESM => ANALYSIS 9 ', SUM(rseTimerTotalThread9(0:(OMPNUMTHREADS - 1)))
   ! ######################################################################################################################################################
 
   ! *** Print statistics for local analysis to the screen ***
