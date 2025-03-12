@@ -899,6 +899,9 @@ CONTAINS
     REAL :: sradius                 ! Directional support radius
     LOGICAL :: checkdist            ! Flag whether distance is within cut-off radius
 
+    INTEGER :: normBranch
+    INTEGER :: nradBranch
+
 
 ! **********************
 ! *** Initialization ***
@@ -907,9 +910,29 @@ CONTAINS
     ! RSE: STEP 1. Move outside loop (speed-up 1.3)
     IF (.NOT.ALLOCATED(thisobs%domainsize)) THEN
         domsize = 0
-     ELSE
+    ELSE
         domsize = 1
-     END IF
+    END IF
+
+    ! RSE: STEP 3. Replace repeated comparisons with constants (speed-up 2.8)
+    normBranch = 0
+    IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
+       ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. (domsize==0)) ) THEN
+        normBranch = 1
+    ELSEIF ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==1) THEN
+        normBranch = 2
+    ELSEIF (thisobs%disttype==2 .OR. thisobs%disttype==12) THEN
+        normBranch = 3
+    ELSEIF (thisobs%disttype==3 .OR. thisobs%disttype==13) THEN
+        normBranch = 4
+    END IF
+    
+    nradBranch = 0
+    IF (thisobs_l%nradii == 2 .OR. (thisobs_l%nradii == 3 .AND. thisobs%disttype >= 10)) THEN
+        nradBranch = 1
+    ELSEIF (thisobs_l%nradii == 3  .AND. thisobs%disttype < 10) THEN
+        nradBranch = 2
+    END IF
 
     scancount: DO i = 1, thisobs%dim_obs_f
 
@@ -926,8 +949,7 @@ CONTAINS
 ! *** Compute distance ***
 ! ************************       
 
-       norm: IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
-            ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==0)) THEN
+       norm: IF (normBranch == 1) THEN
 
           ! *** Compute Cartesian distance ***
 
@@ -988,8 +1010,8 @@ CONTAINS
                 END DO
              END IF
           END IF
-
-       ELSEIF ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==1) THEN norm
+        
+        ELSEIF (normBranch == 2) THEN norm
 
           ! *** Compute periodic Cartesian distance ***          
 
@@ -1079,9 +1101,9 @@ CONTAINS
                    distance2 = distance2 + dists(k)*dists(k)
                 END DO
              END IF
-          END IF
+          END IF        
 
-       ELSEIF (thisobs%disttype==2 .OR. thisobs%disttype==12) THEN norm
+        ELSEIF (normBranch == 3) THEN norm
 
           ! *** Compute distance from geographic coordinates ***          
 
@@ -1134,7 +1156,7 @@ CONTAINS
              END IF
           END IF
 
-       ELSEIF (thisobs%disttype==3 .OR. thisobs%disttype==13) THEN norm
+        ELSEIF (normBranch == 4) THEN norm
 
           ! *** Compute distance from geographic coordinates with haversine formula ***          
 
@@ -1209,7 +1231,7 @@ CONTAINS
              END IF
           END IF
 
-       END IF norm
+        END IF norm
 
 
 ! ***************************************************************************
@@ -1217,7 +1239,7 @@ CONTAINS
 ! ***************************************************************************
 
        dflag: IF (distflag) THEN
-          nrad: IF (thisobs_l%nradii == 2 .OR. (thisobs_l%nradii == 3 .AND. thisobs%disttype >= 10)) THEN
+          nrad: IF (nradBranch == 1) THEN
 
              IF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .OR. &
                   (thisobs_l%sradius(1) == thisobs_l%sradius(2))) THEN
@@ -1274,7 +1296,7 @@ CONTAINS
 
              END IF
 
-          ELSE IF (thisobs_l%nradii == 3  .AND. thisobs%disttype < 10) THEN nrad
+          ELSE IF (nradBranch == 2) THEN nrad
 
              ! To save computing time, we here distinguish whether 
              ! - the horizontal radii are equal and only direction 3 has a different radius
