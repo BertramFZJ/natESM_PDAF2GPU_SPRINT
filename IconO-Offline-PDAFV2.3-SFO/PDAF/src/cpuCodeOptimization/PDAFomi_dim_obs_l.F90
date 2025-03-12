@@ -901,7 +901,8 @@ CONTAINS
 
     INTEGER :: normBranch
     INTEGER :: nradBranch
-
+    LOGICAL :: logicFlag1, logicFlag2, logicFlag3, logicFlag4
+    LOGICAL :: logicFlag5, logicFlag6, logicFlag7, logicFlag8, logicFlag9
 
 ! **********************
 ! *** Initialization ***
@@ -914,7 +915,7 @@ CONTAINS
         domsize = 1
     END IF
 
-    ! RSE: STEP 3. Replace repeated comparisons with constants (speed-up 2.8)
+    ! RSE: STEP 3. Replace repeated comparisons with constants (speed-up 2.7)
     normBranch = 0
     IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
        ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. (domsize==0)) ) THEN
@@ -934,16 +935,30 @@ CONTAINS
         nradBranch = 2
     END IF
 
+    logicFlag1 = ( (thisobs_l%cradius(1) == thisobs_l%cradius(2)) .OR. &
+                   (thisobs_l%sradius(1) == thisobs_l%sradius(2)) )
+    logicFlag2 = ( (thisobs_l%cradius(1)>0.0) .OR. (thisobs_l%cradius(2)>0.0) )
+    logicFlag3 = ( (thisobs_l%sradius(1)>0.0) .OR. (thisobs_l%sradius(2)>0.0) )
+    logicFlag4 = ( (thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
+                   (thisobs_l%cradius(1) /= thisobs_l%cradius(3)) .AND. &
+                   (thisobs_l%sradius(1) == thisobs_l%sradius(2)) )
+    logicFlag5 = ( (thisobs_l%cradius(1)>0.0) .OR. (thisobs_l%cradius(3)>0.0) )
+    logicFlag6 = ( (thisobs_l%sradius(1)>0.0) .OR. (thisobs_l%sradius(3)>0.0) )
+    logicFlag7 = ( (thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
+                   (thisobs_l%cradius(1) == thisobs_l%cradius(3)) .AND. &
+                   (thisobs_l%sradius(1) == thisobs_l%sradius(2)) .AND. &
+                   (thisobs_l%sradius(2) == thisobs_l%sradius(3)) )
+    logicFlag8 = ( (thisobs_l%cradius(1)>0.0) .OR. (thisobs_l%cradius(2)>0.0) .OR. (thisobs_l%cradius(3)>0.0) )
+    logicFlag9 = ( (thisobs_l%sradius(1)>0.0) .OR. (thisobs_l%sradius(2)>0.0) .OR. (thisobs_l%sradius(3)>0.0) )
+
     scancount: DO i = 1, thisobs%dim_obs_f
 
        ! Initialize distance flag
        checkdist = .FALSE.    ! Whether an observation lies within the local box
-       distflag = .TRUE.      ! Whether an observation lies within the local radius (ellipse, ellipsoid)
-       
+       distflag = .TRUE.      ! Whether an observation lies within the local radius (ellipse, ellipsoid)       
 
        ! Observation coordinates
        coordsB = thisobs%ocoord_f(1:thisobs%ncoord, i)
-
 
 ! ************************
 ! *** Compute distance ***
@@ -1241,8 +1256,7 @@ CONTAINS
        dflag: IF (distflag) THEN
           nrad: IF (nradBranch == 1) THEN
 
-             IF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .OR. &
-                  (thisobs_l%sradius(1) == thisobs_l%sradius(2))) THEN
+             IF ( logicFlag1 ) THEN
                 ! 2D isotropic case
 
                 cradius2 = thisobs_l%cradius(1) * thisobs_l%cradius(1)
@@ -1268,7 +1282,7 @@ CONTAINS
                 END IF
 
                 ! Compute radius in direction of theta
-                IF (thisobs_l%cradius(1)>0.0 .OR. thisobs_l%cradius(2)>0.0) THEN
+                IF ( logicFlag2 ) THEN
                    cradius = thisobs_l%cradius(1) * thisobs_l%cradius(2) / &
                         SQRT( (thisobs_l%cradius(2)*COS(theta))**2  &
                         + (thisobs_l%cradius(1)*SIN(theta))**2 )
@@ -1284,7 +1298,7 @@ CONTAINS
                    cnt_obs = cnt_obs + 1
 
                    ! Compute support radius in direction of theta
-                   IF (thisobs_l%sradius(1)>0.0 .OR. thisobs_l%sradius(2)>0.0) THEN
+                   IF ( logicFlag3 ) THEN
                       sradius = thisobs_l%sradius(1) * thisobs_l%sradius(2) / &
                            SQRT( (thisobs_l%sradius(2)*COS(theta))**2 &
                            + (thisobs_l%sradius(1)*SIN(theta))**2 )
@@ -1303,9 +1317,7 @@ CONTAINS
              ! - whether all radii are equal (isotropic but specified with separate radii)
              ! - the anisotropy is in all 3 dimensions (all radii different)
 
-             aniso: IF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
-                  (thisobs_l%cradius(1) /= thisobs_l%cradius(3)) .AND. &
-                  (thisobs_l%sradius(1) == thisobs_l%sradius(2))) THEN
+             aniso: IF ( logicFlag4 ) THEN
 
                 ! *** Isotropic in horizontal direction, distinct radius in the third direction (vertical) ***
 
@@ -1321,7 +1333,7 @@ CONTAINS
                 END IF
 
                 ! Compute radius in direction of theta
-                IF (thisobs_l%cradius(1)>0.0 .OR. thisobs_l%cradius(3)>0.0) THEN
+                IF ( logicFlag5 ) THEN
                    cradius = thisobs_l%cradius(1) * thisobs_l%cradius(3) / &
                         SQRT( (thisobs_l%cradius(3)*COS(theta))**2  &
                         + (thisobs_l%cradius(1)*SIN(theta))**2 )
@@ -1337,7 +1349,7 @@ CONTAINS
                    cnt_obs = cnt_obs + 1
 
                    ! Compute support radius in direction of theta
-                   IF (thisobs_l%sradius(1)>0.0 .OR. thisobs_l%sradius(3)>0.0) THEN
+                   IF ( logicFlag6 ) THEN
                       sradius = thisobs_l%sradius(1) * thisobs_l%sradius(3) / &
                            SQRT( (thisobs_l%sradius(3)*COS(theta))**2 &
                            + (thisobs_l%sradius(1)*SIN(theta))**2 )
@@ -1347,10 +1359,7 @@ CONTAINS
                    
                 END IF
 
-             ELSEIF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
-                  (thisobs_l%cradius(1) == thisobs_l%cradius(3)) .AND. &
-                  (thisobs_l%sradius(1) == thisobs_l%sradius(2)) .AND. &
-                  (thisobs_l%sradius(2) == thisobs_l%sradius(3))) THEN aniso
+             ELSEIF ( logicFlag7 ) THEN aniso
 
                 ! *** 3D isotropic case (all radii equal) ***
 
@@ -1388,7 +1397,7 @@ CONTAINS
                 END IF
 
                 ! Compute radius in direction of theta
-                IF (thisobs_l%cradius(1)>0.0 .OR. thisobs_l%cradius(2)>0.0 .OR. thisobs_l%cradius(3)>0.0) THEN
+                IF ( logicFlag8 ) THEN
                    cradius = thisobs_l%cradius(1) * thisobs_l%cradius(2) * thisobs_l%cradius(3) / &
                         SQRT( (thisobs_l%cradius(2)*thisobs_l%cradius(3)*COS(phi)*COS(theta))**2 &
                         + (thisobs_l%cradius(1)*thisobs_l%cradius(3)*COS(phi)*SIN(theta))**2 &
@@ -1405,7 +1414,7 @@ CONTAINS
                    cnt_obs = cnt_obs + 1
 
                    ! Compute support radius in direction of theta
-                   IF (thisobs_l%sradius(1)>0.0 .OR. thisobs_l%sradius(2)>0.0 .OR. thisobs_l%sradius(3)>0.0) THEN
+                   IF ( logicFlag9 ) THEN
                       sradius = thisobs_l%sradius(1) * thisobs_l%sradius(2) * thisobs_l%sradius(3) / &
                            SQRT( (thisobs_l%sradius(2)*thisobs_l%sradius(3)*COS(phi)*COS(theta))**2 &
                            + (thisobs_l%sradius(1)*thisobs_l%sradius(3)*COS(phi)*SIN(theta))**2 &
