@@ -882,7 +882,7 @@ CONTAINS
 
 ! *** Local variables ***
     INTEGER :: i, k                 ! Counters
-    INTEGER :: verbose              ! verbosity flag
+    
     INTEGER :: domsize              ! Flag whether domainsize is set
     LOGICAL :: distflag             ! Flag whether distance in a coordinate direction is within cradius
     REAL :: slon, slat              ! sine of distance in longitude or latitude
@@ -890,8 +890,11 @@ CONTAINS
     REAL :: cradius2                ! cut-off radius on ellipse or ellipsoid
     REAL :: phi, theta              ! Angles in ellipse or ellipsoid
     REAL :: dist_xy                 ! Distance in xy-plan in 3D case
-    REAL :: dists(thisobs%ncoord)   ! Distance vector between analysis point and observation
-    REAL :: coordsB(thisobs%ncoord) ! Array for coordinates of a single observation
+    
+    ! RSE: STEP 2. Set a fixed array size (speed-up 2.25)
+    REAL :: dists(16)   ! Distance vector between analysis point and observation
+    REAL :: coordsB(16) ! Array for coordinates of a single observation
+    
     REAL :: cradius                 ! Directional cut-off radius
     REAL :: sradius                 ! Directional support radius
     LOGICAL :: checkdist            ! Flag whether distance is within cut-off radius
@@ -901,14 +904,19 @@ CONTAINS
 ! *** Initialization ***
 ! **********************
 
+    ! RSE: STEP 1. Move outside loop (speed-up 1.3)
+    IF (.NOT.ALLOCATED(thisobs%domainsize)) THEN
+        domsize = 0
+     ELSE
+        domsize = 1
+     END IF
+
     scancount: DO i = 1, thisobs%dim_obs_f
 
        ! Initialize distance flag
        checkdist = .FALSE.    ! Whether an observation lies within the local box
        distflag = .TRUE.      ! Whether an observation lies within the local radius (ellipse, ellipsoid)
-
-       ! Verbosity flag
-       verbose = i
+       
 
        ! Observation coordinates
        coordsB = thisobs%ocoord_f(1:thisobs%ncoord, i)
@@ -916,27 +924,12 @@ CONTAINS
 
 ! ************************
 ! *** Compute distance ***
-! ************************
-
-       IF (.NOT.ALLOCATED(thisobs%domainsize)) THEN
-          domsize = 0
-       ELSE
-          domsize = 1
-       END IF
-
-       ! Debug output
-       IF (debug>0 .AND. verbose==0) THEN
-          WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  use non-isotropic localization'
-       END IF
+! ************************       
 
        norm: IF ((thisobs%disttype==0 .OR. thisobs%disttype==10) .OR. &
             ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==0)) THEN
 
           ! *** Compute Cartesian distance ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  compute Cartesian distance'
-          END IF
 
           IF (thisobs%ncoord==3) THEN
              dists(3) = ABS(coordsA(3) - coordsB(3))
@@ -998,11 +991,7 @@ CONTAINS
 
        ELSEIF ((thisobs%disttype==1 .OR. thisobs%disttype==11) .AND. domsize==1) THEN norm
 
-          ! *** Compute periodic Cartesian distance ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  compute periodic Cartesian distance'
-          END IF
+          ! *** Compute periodic Cartesian distance ***          
 
           IF (thisobs%ncoord==3) THEN
              IF (thisobs%domainsize(3)<=0.0) THEN 
@@ -1094,11 +1083,7 @@ CONTAINS
 
        ELSEIF (thisobs%disttype==2 .OR. thisobs%disttype==12) THEN norm
 
-          ! *** Compute distance from geographic coordinates ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  compute geographic distance'
-          END IF
+          ! *** Compute distance from geographic coordinates ***          
 
           IF (thisobs%ncoord==3) THEN
              dists(3) = ABS(coordsA(3) - coordsB(3))
@@ -1151,12 +1136,7 @@ CONTAINS
 
        ELSEIF (thisobs%disttype==3 .OR. thisobs%disttype==13) THEN norm
 
-          ! *** Compute distance from geographic coordinates with haversine formula ***
-
-          IF (debug>0 .AND. verbose==0) THEN
-             WRITE (*,*) '++ OMI-debug check_dist2_noniso:    ', debug, &
-                  '  compute geographic distance using haversine function'
-          END IF
+          ! *** Compute distance from geographic coordinates with haversine formula ***          
 
           IF (thisobs%ncoord==3) THEN
              dists(3) = ABS(coordsA(3) - coordsB(3))
@@ -1252,13 +1232,7 @@ CONTAINS
 
                    cradius = thisobs_l%cradius(1)
                    sradius = thisobs_l%sradius(1)
-
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  2D isotropic with separately specified, but equal, radii'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                           theta*180/pi, cradius, sradius
-                   END IF
+                   
                 END IF
              ELSE
 
@@ -1295,13 +1269,7 @@ CONTAINS
                    ELSE
                       sradius = 0.0
                    END IF
-
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  2D nonisotropic localization'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                           theta*180/pi, cradius, sradius
-                   END IF
+                   
                 END IF
 
              END IF
@@ -1354,13 +1322,7 @@ CONTAINS
                    ELSE
                       sradius = 0.0
                    END IF
-
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  3D: isotropic in directions 1 and 2, nonisotropic in direction 3'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                           theta*180/pi, cradius, sradius
-                   END IF
+                   
                 END IF
 
              ELSEIF ((thisobs_l%cradius(1) == thisobs_l%cradius(2)) .AND. &
@@ -1379,13 +1341,7 @@ CONTAINS
                    checkdist = .TRUE.
                    cnt_obs = cnt_obs + 1
                 END IF
-
-                IF (debug>0) THEN
-                   WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                        '  3D isotropic case specified with vector of radii'
-                   WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, cradius, sradius', &
-                        theta*180/pi, cradius, sradius
-                END IF
+                
              ELSE aniso
 
                 ! *** general 3D anisotropic case ***
@@ -1435,13 +1391,7 @@ CONTAINS
                    ELSE
                       sradius = 0.0
                    END IF
-
-                   IF (debug>0) THEN
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, &
-                           '  3D nonisotropic localization'
-                      WRITE (*,*) '++ OMI-debug check_dist2_noniso: ', debug, '  theta, phi, distance, cradius, sradius', &
-                           theta*180/pi, phi*180/pi, SQRT(distance2), cradius, sradius
-                   END IF
+                   
                 END IF
 
              END IF aniso
