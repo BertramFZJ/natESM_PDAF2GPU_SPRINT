@@ -8,8 +8,8 @@ MODULE linearAlgebraGpuTemplate
     PUBLIC :: type_laTask
     PUBLIC :: accMatrixMatrixMultVectorLevel
     PUBLIC :: cudaProcessSingleTask
-
-    PUBLIC :: cudaResetMatrixR
+    PUBLIC :: cudaProcessTasksBatchedDP
+    PUBLIC :: cudaProcessTasksBatched
 
     TYPE type_laTask
 
@@ -86,20 +86,82 @@ MODULE linearAlgebraGpuTemplate
             idCol =     idCell / task%taskSize  + 1
             idRow = MOD(idCell,  task%taskSize) + 1
 
-#if 0
-            task%matrixR(idRow, idCol) = REAL(idCell) + 0.1d0 * REAL(idRow) + 0.01d0 * REAL(idCol)
-#else
             task%matrixR(idRow, idCol) = task%matrixR(idRow, idCol) * beta
             DO km = 1, task%taskSize
                 task%matrixR(idRow, idCol) = task%matrixR(idRow, idCol) &
                 + alpha * task%matrixA(idRow, km) * task%matrixB(km, idCol)
             END DO
-#endif
 
             idCell = idCell + griddim%x * blockdim%x
 
         END DO
         
     END SUBROUTINE cudaProcessSingleTask
+
+    ATTRIBUTES(global) SUBROUTINE cudaProcessTasksBatchedDP(tasks, N, alpha, beta)
+        TYPE(type_laTask), DEVICE, INTENT(inout) :: tasks(1:N)
+        INTEGER, VALUE, INTENT(IN)               :: N
+        DOUBLE PRECISION, VALUE, INTENT(in)      :: alpha, beta
+
+        INTEGER :: idTask
+        INTEGER :: gridSize, blockSize
+
+        idTask = threadidx%x + (blockidx%x - 1) * blockdim%x ! - 1
+
+        DO WHILE(idTask .LE. N)
+
+            blockSize = 128
+#if 1
+            gridSize = tasks(idTask)%taskSize * tasks(idTask)%taskSize / blockSize
+            IF(MOD(tasks(idTask)%taskSize * tasks(idTask)%taskSize, blockSize) /= 0) THEN
+                gridSize = gridSize + 1
+            END IF
+#else
+            gridSize = 1
+#endif
+
+            CALL cudaProcessSingleTask<<<gridSize, blockSize>>>(tasks(idTask), alpha, beta)
+
+            idTask = idTask + griddim%x * blockdim%x
+
+        END DO        
+        
+    END SUBROUTINE cudaProcessTasksBatchedDP
+
+    ATTRIBUTES(global) SUBROUTINE cudaProcessTasksBatched(tasks, N, alpha, beta)
+        TYPE(type_laTask), DEVICE, INTENT(inout) :: tasks(1:N)
+        INTEGER, VALUE, INTENT(IN)               :: N
+        DOUBLE PRECISION, VALUE, INTENT(in)      :: alpha, beta
+
+        INTEGER :: idTask, numCells, idCell, idCol, idRow
+        INTEGER :: km
+
+        idTask = blockidx%x
+
+        DO WHILE(idTask .LE. N)
+
+            numCells = tasks(idTask)%taskSize * tasks(idTask)%taskSize
+            idCell = threadidx%x - 1
+
+            DO WHILE(idCell .LT. numCells)
+            
+                idCol =     idCell / tasks(idTask)%taskSize  + 1
+                idRow = MOD(idCell,  tasks(idTask)%taskSize) + 1
+    
+                tasks(idTask)%matrixR(idRow, idCol) = tasks(idTask)%matrixR(idRow, idCol) * beta
+                DO km = 1, tasks(idTask)%taskSize
+                    tasks(idTask)%matrixR(idRow, idCol) = tasks(idTask)%matrixR(idRow, idCol) &
+                    + alpha * tasks(idTask)%matrixA(idRow, km) * tasks(idTask)%matrixB(km, idCol)
+                END DO
+    
+                idCell = idCell + blockdim%x
+    
+            END DO
+
+            idTask = idTask + griddim%x
+
+        END DO
+        
+    END SUBROUTINE cudaProcessTasksBatched
 
 END MODULE linearAlgebraGpuTemplate

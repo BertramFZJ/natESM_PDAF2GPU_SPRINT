@@ -6,7 +6,8 @@ PROGRAM MAIN
     USE CUBLAS_V2    
     
     USE linearAlgebraGpuTemplate, ONLY: type_laTask, accMatrixMatrixMultVectorLevel, &
-                                        cudaProcessSingleTask, cudaResetMatrixR
+                                        cudaProcessSingleTask, cudaProcessTasksBatchedDP, &
+                                        cudaProcessTasksBatched
 
     IMPLICIT NONE
 
@@ -142,7 +143,7 @@ PROGRAM MAIN
 
     execTime = omp_get_wtime()
     ! In this particular case, the compiler ignores the vector size settings (vector_length clause) and sets the vector length to 32.
-    ! The number of gangs is equal to the number of grid nodes (individual tasks).
+    ! The number of gangs is equal to the number of grid nodes (individual tasks).    
     !$ACC PARALLEL LOOP GANG(STATIC:1) DEFAULT(PRESENT) FIRSTPRIVATE(alpha, beta) ASYNC(1)
     DO i = 1, numberOfTasks
 
@@ -238,28 +239,32 @@ PROGRAM MAIN
     CALL resetMatrixR(tasks, numberOfTasks)
 
     execTime = omp_get_wtime()
-#if 0
+#if 1
+    !$OMP PARALLEL NUM_THREADS(numberOfCudaStreams) PRIVATE(idCudaStream)
+
+    idCudaStream = omp_get_thread_num() + 1
+
+    !$OMP DO SCHEDULE(STATIC)
     DO i = 1, numberOfTasks
         !$ACC HOST_DATA USE_DEVICE(tasks(i))
-        CALL cudaProcessSingleTask<<<4,128>>>(tasks(i), alpha, beta)
+        CALL cudaProcessSingleTask<<<4,128,0,cudaStream(idCudaStream)>>>(tasks(i), alpha, beta)
         !$ACC END HOST_DATA
     END DO
-    ierror = cudaDeviceSynchronize()
+    !$OMP END DO
+
+    !$OMP END PARALLEL
 #else
-    !$ACC PARALLEL LOOP DEFAULT(PRESENT) DEVICEPTR(tasks)
-    DO i = 1, numberOfTasks
-        ! !$ACC HOST_DATA USE_DEVICE(tasks(i))
-        CALL cudaProcessSingleTask<<<4,128>>>(tasks(i), alpha, beta)
-        ! !$ACC END HOST_DATA
-    END DO
-    !$ACC END PARALLEL LOOP
+    !$ACC HOST_DATA USE_DEVICE(tasks)
+    ! CALL cudaProcessTasksBatchedDP<<<1, 128>>>(tasks, numberOfTasks, alpha, beta)
+    CALL cudaProcessTasksBatched<<<512, 128>>>(tasks, numberOfTasks, alpha, beta)
+    !$ACC END HOST_DATA
 #endif
+    ierror = cudaDeviceSynchronize()
     execTime = omp_get_wtime() - execTime
     WRITE(6,'(1x, A50, 1x, F20.4, 1x, A)') "[GPU] cudaProcessSingleTask LOOP EXECUTION TIME:", execTime, "SEC"
-    
+    FLUSH(6)
 
     CALL calculateDeviatoions(tasks, numberOfTasks, .TRUE.)
-    ! WRITE(6,*) tasks(1)%matrixR(:,:)
 
     
     
