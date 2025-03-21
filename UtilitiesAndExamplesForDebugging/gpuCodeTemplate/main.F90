@@ -5,7 +5,8 @@ PROGRAM MAIN
     USE CUDAFOR
     USE CUBLAS_V2    
     
-    USE linearAlgebraGpuTemplate, ONLY: type_laTask, accMatrixMatrixMultVectorLevel
+    USE linearAlgebraGpuTemplate, ONLY: type_laTask, accMatrixMatrixMultVectorLevel, &
+                                        cudaProcessSingleTask, cudaResetMatrixR
 
     IMPLICIT NONE
 
@@ -30,7 +31,6 @@ PROGRAM MAIN
     
     DOUBLE PRECISION, POINTER :: ptrA(:,:), ptrB(:,:), ptrR(:,:)    
     
-    ! WRITE(0,'(1x, a, I3, a, F7.2, 3x, F7.2, 3x, I9)')
     WRITE(6,'(1x, A50)') "START  PROGRAM"
     FLUSH(6)
 
@@ -42,7 +42,7 @@ PROGRAM MAIN
     ! Individual task - multiplication of square matrices matrixR := alpha * matrixA * matrixB + beta * matrixR
     ! The matrix MatrixEX stores the exact solution - the result of calculations on the CPU. It is used to check the correctness
     ! of the result of calculations on the GPU.
-    ! The size of the matrices MatrixA/B/C(1:taskSize,1:taskSize) in different tasks may differ.
+    ! The size of the matrices Matrix<A/B/C>(1:taskSize,1:taskSize) in different tasks may differ.
 
     numberOfTasks = 2048 * 16    
     ALLOCATE(tasks(1:numberOfTasks))
@@ -234,6 +234,34 @@ PROGRAM MAIN
 ! #########################################################################################################################################################
 ! #########################################################################################################################################################
 ! #########################################################################################################################################################
+
+    CALL resetMatrixR(tasks, numberOfTasks)
+
+    execTime = omp_get_wtime()
+#if 0
+    DO i = 1, numberOfTasks
+        !$ACC HOST_DATA USE_DEVICE(tasks(i))
+        CALL cudaProcessSingleTask<<<4,128>>>(tasks(i), alpha, beta)
+        !$ACC END HOST_DATA
+    END DO
+    ierror = cudaDeviceSynchronize()
+#else
+    !$ACC PARALLEL LOOP DEFAULT(PRESENT) DEVICEPTR(tasks)
+    DO i = 1, numberOfTasks
+        ! !$ACC HOST_DATA USE_DEVICE(tasks(i))
+        CALL cudaProcessSingleTask<<<4,128>>>(tasks(i), alpha, beta)
+        ! !$ACC END HOST_DATA
+    END DO
+    !$ACC END PARALLEL LOOP
+#endif
+    execTime = omp_get_wtime() - execTime
+    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A)') "[GPU] cudaProcessSingleTask LOOP EXECUTION TIME:", execTime, "SEC"
+    
+
+    CALL calculateDeviatoions(tasks, numberOfTasks, .TRUE.)
+    ! WRITE(6,*) tasks(1)%matrixR(:,:)
+
+    
     
     WRITE(6,*) "FINISH PROGRAM"
 
