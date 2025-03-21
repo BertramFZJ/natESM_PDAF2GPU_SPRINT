@@ -1,12 +1,14 @@
 MODULE linearAlgebraGpuTemplate
 
     USE CUDAFOR
+    USE CUBLAS_V2
 
     IMPLICIT NONE
     PRIVATE
 
     PUBLIC :: type_laTask
     PUBLIC :: accMatrixMatrixMultVectorLevel
+    PUBLIC :: callCuBlasDgemmWrapper
     PUBLIC :: cudaProcessSingleTask
     PUBLIC :: cudaProcessTasksBatchedDP
     PUBLIC :: cudaProcessTasksBatched
@@ -53,6 +55,26 @@ MODULE linearAlgebraGpuTemplate
         !$ACC END LOOP
 
     END SUBROUTINE accMatrixMatrixMultVectorLevel
+
+    SUBROUTINE callCuBlasDgemmWrapper(handle, matrixDim, MA, MB, MR, alpha, beta)
+
+        TYPE(cublasHandle), INTENT(in) :: handle
+        INTEGER, INTENT(in) :: matrixDim
+        DOUBLE PRECISION, INTENT(in) :: MA(:,:), MB(:,:)
+        DOUBLE PRECISION, INTENT(inout) :: MR(:,:)
+        DOUBLE PRECISION, INTENT(in) :: alpha, beta
+
+        INTEGER :: ierror       
+
+        !$ACC HOST_DATA USE_DEVICE(MA, MB, MR)
+        ierror = cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, &
+                             matrixDim, matrixDim, matrixDim, &
+                             alpha, MA, matrixDim, &
+                             MR, matrixDim, &
+                             beta, MR, matrixDim)
+        !$ACC END HOST_DATA        
+
+    END SUBROUTINE callCuBlasDgemmWrapper
 
     ATTRIBUTES(global) SUBROUTINE cudaResetMatrixR(tasks, N)
         TYPE(type_laTask), DEVICE, INTENT(inout) :: tasks(1:N)

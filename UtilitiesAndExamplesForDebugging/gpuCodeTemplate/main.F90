@@ -3,11 +3,11 @@ PROGRAM MAIN
     USE OMP_LIB
     USE OPENACC
     USE CUDAFOR
-    USE CUBLAS_V2    
+    USE CUBLAS_V2
     
     USE linearAlgebraGpuTemplate, ONLY: type_laTask, accMatrixMatrixMultVectorLevel, &
                                         cudaProcessSingleTask, cudaProcessTasksBatchedDP, &
-                                        cudaProcessTasksBatched
+                                        cudaProcessTasksBatched, callCuBlasDgemmWrapper
 
     IMPLICIT NONE
 
@@ -27,12 +27,14 @@ PROGRAM MAIN
     DOUBLE PRECISION :: alpha = 1.0d0
     DOUBLE PRECISION :: beta  = 0.0d0
 
-    DOUBLE PRECISION :: deviation, ldeviation
+    INTEGER :: cudaKernelGridSize, cudaKernelBlockSize
+
     DOUBLE PRECISION :: execTime    
     
     DOUBLE PRECISION, POINTER :: ptrA(:,:), ptrB(:,:), ptrR(:,:)    
     
     WRITE(6,'(1x, A50)') "START  PROGRAM"
+    WRITE(6,*)
     FLUSH(6)
 
 ! #########################################################################################################################################################
@@ -81,7 +83,7 @@ PROGRAM MAIN
 ! #########################################################################################################################################################
 ! #########################################################################################################################################################
 
-    ! Matrix multiplication on CPU using dgemm subroutine from BLAS library.
+    ! Matrix multiplication on CPU using dgemm subroutine from BLAS library
     
     execTime = omp_get_wtime()
     !$OMP PARALLEL DO NUM_THREADS(numberOfOpenmpThreadsCPU)
@@ -226,7 +228,7 @@ PROGRAM MAIN
 
     !$OMP END PARALLEL
     execTime = omp_get_wtime() - execTime
-    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A, 1x, I3, 1x, A)') "[CPU] CuBLAS cublasDgemm EXECUTION TIME:", execTime, "SEC FOR ", &
+    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A, 1x, I3, 1x, A)') "[GPU] CuBLAS cublasDgemm EXECUTION TIME:", execTime, "SEC FOR ", &
           numberOfCudaStreams, "CUDA STREAMS / OpenMP THREADS"
     FLUSH(6)
 
@@ -236,10 +238,45 @@ PROGRAM MAIN
 ! #########################################################################################################################################################
 ! #########################################################################################################################################################
 
+    ! Concurrent execution of the cublasDgemm subroutine for individual tasks in different CUDA streams using subroutine wrapper
+
     CALL resetMatrixR(tasks, numberOfTasks)
 
+    execTime = omp_get_wtime()    
+    !$OMP PARALLEL NUM_THREADS(numberOfCudaStreams) PRIVATE(idCudaStream, ierror, ptrA, ptrB, ptrR)
+
+    idCudaStream = omp_get_thread_num() + 1
+
+    !$OMP DO SCHEDULE(STATIC)
+    DO i = 1, numberOfTasks        
+        CALL callCuBlasDgemmWrapper(handleCuBlas(idCudaStream), tasks(i)%taskSize, &
+                                    tasks(i)%matrixA, tasks(i)%matrixB, tasks(i)%matrixR, &
+                                    alpha, beta)        
+        ierror = cudaStreamSynchronize( cudaStream(idCudaStream) )
+    END DO
+    !$OMP END DO
+    ! ierror = cudaStreamSynchronize( cudaStream(idCudaStream) )
+
+    !$OMP END PARALLEL
+    execTime = omp_get_wtime() - execTime
+    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A, 1x, I3, 1x, A)') "[GPU] CuBLAS cublasDgemm WRAPPER EXECUTION TIME:", execTime, "SEC FOR ", &
+          numberOfCudaStreams, "CUDA STREAMS / OpenMP THREADS"
+    FLUSH(6)
+
+    CALL calculateDeviatoions(tasks, numberOfTasks, .TRUE.)
+
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+
+    ! Concurrent execution of a self-developed CUDA matrix-matrix multiplication subroutine for individual tasks in different CUDA threads
+
+    CALL resetMatrixR(tasks, numberOfTasks)
+
+    cudaKernelGridSize  = 4
+    cudaKernelBlockSize = 128
+
     execTime = omp_get_wtime()
-#if 1
     !$OMP PARALLEL NUM_THREADS(numberOfCudaStreams) PRIVATE(idCudaStream)
 
     idCudaStream = omp_get_thread_num() + 1
@@ -247,83 +284,77 @@ PROGRAM MAIN
     !$OMP DO SCHEDULE(STATIC)
     DO i = 1, numberOfTasks
         !$ACC HOST_DATA USE_DEVICE(tasks(i))
-        CALL cudaProcessSingleTask<<<4,128,0,cudaStream(idCudaStream)>>>(tasks(i), alpha, beta)
+        CALL cudaProcessSingleTask<<<cudaKernelGridSize,cudaKernelBlockSize,0,cudaStream(idCudaStream)>>>(tasks(i), alpha, beta)
         !$ACC END HOST_DATA
     END DO
     !$OMP END DO
 
+    ierror = cudaStreamSynchronize( cudaStream(idCudaStream) )
+
     !$OMP END PARALLEL
-#else
-    !$ACC HOST_DATA USE_DEVICE(tasks)
-    ! CALL cudaProcessTasksBatchedDP<<<1, 128>>>(tasks, numberOfTasks, alpha, beta)
-    CALL cudaProcessTasksBatched<<<512, 128>>>(tasks, numberOfTasks, alpha, beta)
-    !$ACC END HOST_DATA
-#endif
-    ierror = cudaDeviceSynchronize()
     execTime = omp_get_wtime() - execTime
-    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A)') "[GPU] cudaProcessSingleTask LOOP EXECUTION TIME:", execTime, "SEC"
+    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A, 1x, I3, 1x, A, I3, A, I3, A)') "[GPU] CUDA SINGLE TASK KERNEL ET:", execTime, &
+          "SEC FOR ", numberOfCudaStreams, "CUDA STREAMS / OpenMP THREADS, LAUNCH CONFIG: <<<", &
+          cudaKernelGridSize, ", ", cudaKernelBlockSize, ">>>"
     FLUSH(6)
 
     CALL calculateDeviatoions(tasks, numberOfTasks, .TRUE.)
 
-    
-    
-    WRITE(6,*) "FINISH PROGRAM"
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+
+    ! A self-developed CUDA batched matrix-matrix multiplication subroutine using dynamic parallelism
+
+    CALL resetMatrixR(tasks, numberOfTasks)
+
+    cudaKernelGridSize  = 2
+    cudaKernelBlockSize = 128
+
+    execTime = omp_get_wtime()
+    !$ACC HOST_DATA USE_DEVICE(tasks)
+    CALL cudaProcessTasksBatchedDP<<<cudaKernelGridSize, cudaKernelBlockSize>>>(tasks, numberOfTasks, alpha, beta)    
+    !$ACC END HOST_DATA
+    ierror = cudaDeviceSynchronize( )    
+    execTime = omp_get_wtime() - execTime
+    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A, I3, A, I4, A)') "[GPU] CUDA BATCHED DYNAMIC PARALLELISM KERNEL ET:", execTime, &
+          "SEC FOR LAUNCH CONFIG: <<<", cudaKernelGridSize, ", ", cudaKernelBlockSize, ">>>"
+    FLUSH(6)
+
+    CALL calculateDeviatoions(tasks, numberOfTasks, .TRUE.)
+
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+
+    ! A self-developed CUDA batched matrix-matrix multiplication subroutine
+
+    CALL resetMatrixR(tasks, numberOfTasks)
+
+    cudaKernelGridSize  = 512
+    cudaKernelBlockSize = 768
+
+    execTime = omp_get_wtime()
+    !$ACC HOST_DATA USE_DEVICE(tasks)
+    CALL cudaProcessTasksBatched<<<cudaKernelGridSize, cudaKernelBlockSize>>>(tasks, numberOfTasks, alpha, beta)
+    !$ACC END HOST_DATA
+    ierror = cudaDeviceSynchronize( )    
+    execTime = omp_get_wtime() - execTime
+    WRITE(6,'(1x, A50, 1x, F20.4, 1x, A, I3, A, I4, A)') "[GPU] CUDA BATCHED KERNEL EXECUTION TIME:", execTime, &
+          "SEC FOR LAUNCH CONFIG: <<<", cudaKernelGridSize, ", ", cudaKernelBlockSize, ">>>"
+    FLUSH(6)
+
+    CALL calculateDeviatoions(tasks, numberOfTasks, .TRUE.)
+
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+! #########################################################################################################################################################
+
+    WRITE(6,*)
+    WRITE(6,'(1x, A50)') "FINISH PROGRAM"
+    FLUSH(6)
 
     CONTAINS
-
-#if 0
-    subroutine callCuBlasDgemm(handle, matrixDim, MA, MB, MR, alpha, beta)
-
-        TYPE(cublasHandle), INTENT(in) :: handle
-        INTEGER, INTENT(in) :: matrixDim
-        DOUBLE PRECISION, INTENT(in) :: MA(:,:), MB(:,:)
-        DOUBLE PRECISION, INTENT(inout) :: MR(:,:)
-        DOUBLE PRECISION, INTENT(in) :: alpha, beta
-
-        INTEGER :: ierror
-
-    #if 1
-        DOUBLE PRECISION, ALLOCATABLE :: CMA(:,:), CMB(:,:), CMR(:,:)
-        ALLOCATE(CMA(1:matrixDim,1:matrixDim), CMB(1:matrixDim,1:matrixDim), CMR(1:matrixDim,1:matrixDim))
-
-        CMA(1:matrixDim,1:matrixDim) = MA(1:matrixDim,1:matrixDim)
-        CMB(1:matrixDim,1:matrixDim) = MB(1:matrixDim,1:matrixDim)
-        CMR(1:matrixDim,1:matrixDim) = MR(1:matrixDim,1:matrixDim)
-
-        !$ACC DATA COPYIN(CMA(:,:), CMB(:,:)) COPYOUT(CMR(:,:))
-
-        !$ACC HOST_DATA USE_DEVICE(CMA, CMB, CMR)
-        ierror = cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, &
-                             matrixDim, matrixDim, matrixDim, &
-                             alpha, CMA, matrixDim, &
-                             CMB, matrixDim, &
-                             beta, CMR, matrixDim)
-        !$ACC END HOST_DATA
-        ierror = cudaDeviceSynchronize()        
-        
-        !$ACC END DATA
-
-        MR(1:matrixDim,1:matrixDim) = CMR(1:matrixDim,1:matrixDim)
-
-        DEALLOCATE(CMA, CMB, CMR)
-    #else
-        !$ACC DATA COPYIN(MA(:,:), MB(:,:)) COPYOUT(MR(:,:))
-
-        !$ACC HOST_DATA USE_DEVICE(MA, MB, MR)
-        ierror = cublasDgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, &
-                             matrixDim, matrixDim, matrixDim, &
-                             alpha, MA, matrixDim, &
-                             MR, matrixDim, &
-                             beta, MR, matrixDim)
-        !$ACC END HOST_DATA
-        ierror = cudaDeviceSynchronize()        
-        
-        !$ACC END DATA        
-    #endif
-
-    end subroutine callCuBlasDgemm
-#endif
 
     subroutine compareMatrixes(matrixA, matrixB, nRow, nCol, deviation)
 
