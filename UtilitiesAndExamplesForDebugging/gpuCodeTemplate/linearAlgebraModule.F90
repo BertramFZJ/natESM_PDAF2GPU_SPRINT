@@ -13,12 +13,15 @@ MODULE linearAlgebraGpuTemplate
     PUBLIC :: cudaProcessTasksBatchedDP
     PUBLIC :: cudaProcessTasksBatched
 
+    ! Structure with parameters of a individual task
     TYPE type_laTask
 
-    INTEGER :: taskIndex ! Comment
-    INTEGER :: taskSize ! Comment
+    INTEGER :: taskIndex ! Individual task identifier
+    INTEGER :: taskSize  ! Task size (matrix size)
 
-    ! Про указатель вместо ALLOCATABLE
+    ! Matrices are declared as pointers so that later, when calling cublasDgemm subroutine,
+    ! direct pointers to 2D data arrays can be created, rather than passing pointers
+    ! to structure members as parameters to the subroutine.
     DOUBLE PRECISION, POINTER :: matrixA(:,:)
     DOUBLE PRECISION, POINTER :: matrixB(:,:)
     DOUBLE PRECISION, POINTER :: matrixR(:,:)    
@@ -133,14 +136,11 @@ MODULE linearAlgebraGpuTemplate
         DO WHILE(idTask .LE. N)
 
             blockSize = 128
-#if 1
+
             gridSize = tasks(idTask)%taskSize * tasks(idTask)%taskSize / blockSize
             IF(MOD(tasks(idTask)%taskSize * tasks(idTask)%taskSize, blockSize) /= 0) THEN
                 gridSize = gridSize + 1
             END IF
-#else
-            gridSize = 1
-#endif
 
             CALL cudaProcessSingleTask<<<gridSize, blockSize>>>(tasks(idTask), alpha, beta)
 
