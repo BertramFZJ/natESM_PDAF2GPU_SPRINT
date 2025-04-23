@@ -21,7 +21,7 @@ from the heap withing <code>PDAF_lestkf_analysis.F90::PDAF_lestkf_analysis</code
 
 <h2 style="text-align: center; font-size: 24pt">Workspace setup</h2>
 
-The workspace setup procedure includes creating a working directory and subsequently cloning three Git repositories into it:
+The workspace setup procedure includes creating a working directory and subsequently cloning three Git repositories into it:<br>
 <b>A1.</b> Create the working directory <code>{work_dir}</code> and navigate into it<br>
 <code>mkdir {work_dir}
 cd {work_dir}</code>                    
